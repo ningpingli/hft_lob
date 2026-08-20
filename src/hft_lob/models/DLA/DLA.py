@@ -22,7 +22,25 @@ class DLA(nn.Module):
             num_snapshots: 每样本的快照数。
             hidden_size: GRU 隐藏层大小。
         """
-        raise NotImplementedError("DLA.__init__ not implemented")
+        super().__init__()
+        num_features = 40 if num_features is None else num_features
+        self.num_features = num_features
+        self.num_snapshots = num_snapshots
+
+        self.W1 = nn.Linear(num_features, num_features, bias=False)
+
+        self.softmax = nn.Softmax(dim=1)
+
+        self.gru = nn.GRU(
+            input_size=num_features,
+            hidden_size=hidden_size,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.5,
+        )
+
+        self.W2 = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.W3 = nn.Linear(num_snapshots * hidden_size, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -31,6 +49,55 @@ class DLA(nn.Module):
             x: 输入张量（形状 ``(N, 1, num_snapshots, num_features)``）。
 
         Returns:
-            模型输出。
+            模型输出 ``(N, 1)``。
+
+        Raises:
+            ValueError: 输入维度与构造契约不一致。
         """
-        raise NotImplementedError("DLA.forward not implemented")
+        # 先去掉单通道维，再执行输入维度契约（GRU 输入维与展平后的 W3 宽度
+        # 依赖快照数 / 特征数）。
+        x = x.squeeze(1)
+        if x.shape[-1] != self.num_features:
+            raise ValueError(
+                f"DLA expects {self.num_features} features per snapshot, got "
+                f"{x.shape[-1]}. 请核对 ExperimentConfig 的 features 特征列契约。"
+            )
+        if x.shape[1] != self.num_snapshots:
+            raise ValueError(
+                f"DLA expects {self.num_snapshots} snapshots per sample, got "
+                f"{x.shape[1]}. 请核对 ExperimentConfig 的 window.history_snapshots 契约。"
+            )
+        # x.shape = [batch_size, num_snapshots, num_features]
+        X_tilde = self.W1(x)
+
+        alpha = self.softmax(X_tilde)
+        # alpha.shape = [batch_size, num_snapshots, num_features]
+
+        alpha = torch.mean(alpha, dim=2)
+        # alpha.shape = [batch_size, num_snapshots]
+
+        x_tilde = torch.einsum("ij,ijk->ijk", alpha, x)
+        # x_tilde.shape = [batch_size, num_snapshots, num_features]
+
+        H, _ = self.gru(x_tilde)
+        # H.shape = [batch_size, num_snapshots, hidden_size]
+
+        H_tilde = self.W2(H)
+        # H_tilde.shape = [batch_size, num_snapshots, hidden_size]
+
+        beta = self.softmax(H_tilde)
+        # beta.shape = [batch_size, num_snapshots, hidden_size]
+
+        beta = torch.mean(beta, dim=2)
+        # beta.shape = [batch_size, num_snapshots]
+
+        h_tilde = torch.einsum("ij,ijk->ijk", beta, H)
+        # h_tilde.shape = [batch_size, num_snapshots, hidden_size]
+
+        h_tilde = torch.flatten(h_tilde, start_dim=1)
+        # h_tilde.shape = [batch_size, hidden_size * num_snapshots]
+
+        logits = self.W3(h_tilde)
+        # logits.shape = [batch_size, 1]（回归读出头）
+
+        return logits

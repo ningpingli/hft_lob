@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -19,7 +20,35 @@ class SinusoidalPositionalEmbedding(nn.Module):
             embedding_dim: 嵌入维度。
             padding_idx: padding 下标（可选）。
         """
-        raise NotImplementedError("SinusoidalPositionalEmbedding.__init__ not implemented")
+        super().__init__()
+        self.embedding = nn.Embedding(
+            num_positions, embedding_dim, padding_idx=padding_idx
+        )
+        self.embedding.weight = self._init_weight(self.embedding.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+        """与 XLM 的 create_sinusoidal_embeddings 相同，只是特征不交错排列。
+
+        cos 特征位于向量的后半部分，即 ``[dim // 2:]``。
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [
+                [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+                for pos in range(n_pos)
+            ]
+        )
+        out.requires_grad = False  # 提前置 False，避免 pytorch-1.8+ 报错
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.tensor(
+            np.sin(position_enc[:, 0::2]), dtype=torch.float32
+        )
+        out[:, sentinel:] = torch.tensor(
+            np.cos(position_enc[:, 1::2]), dtype=torch.float32
+        )
+        out.detach_()
+        return out
 
     @torch.no_grad()
     def forward(
@@ -34,7 +63,14 @@ class SinusoidalPositionalEmbedding(nn.Module):
         Returns:
             位置嵌入张量。
         """
-        raise NotImplementedError("SinusoidalPositionalEmbedding.forward not implemented")
+        _, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length,
+            past_key_values_length + seq_len,
+            dtype=torch.long,
+            device=self.embedding.weight.device,
+        )
+        return self.embedding(positions)
 
 
 class Transformer(nn.Module):
@@ -65,15 +101,64 @@ class Transformer(nn.Module):
             norm_first: 是否先做层归一化。
             history_length: 历史窗口长度。
         """
-        raise NotImplementedError("Transformer.__init__ not implemented")
+        super().__init__()
+        self.num_features = 40 if num_features is None else num_features
+        d_model = 64 if d_model is None else d_model
+        dim_feedforward = 256 if dim_feedforward is None else dim_feedforward
+        nhead = 8 if nhead is None else nhead
+        num_layers = 2 if num_layers is None else num_layers
+
+        # ``num_features`` 是每快照特征数（5 档 20 / 10 档 40）。
+        self.embed = nn.Linear(self.num_features, d_model, bias=False)
+
+        # 位置嵌入长度必须覆盖实际 history_length（曾硬编码 100）。
+        self.embed_positions = SinusoidalPositionalEmbedding(history_length, d_model)
+
+        layer_norm_eps: float = 1e-5
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation=activation,
+            layer_norm_eps=layer_norm_eps,
+            norm_first=norm_first,
+            batch_first=True,
+        )
+        encoder_norm = nn.LayerNorm(d_model, eps=layer_norm_eps)
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_layers, norm=encoder_norm
+        )
+        self.cat_head = nn.Linear(d_model, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
 
         Args:
-            x: 输入张量。
+            x: 输入张量 ``(N, 1, history_length, num_features)``。
 
         Returns:
-            模型输出。
+            模型输出 ``(N, 1)``。
+
+        Raises:
+            ValueError: 特征维度与构造契约不一致。
         """
-        raise NotImplementedError("Transformer.forward not implemented")
+        # 输入维度契约（5 档数据 = 20 特征，10 档 = 40）。
+        if x.shape[-1] != self.num_features:
+            raise ValueError(
+                f"Transformer expects {self.num_features} features per snapshot, "
+                f"got {x.shape[-1]}. 请核对 ExperimentConfig 的 features 特征列 "
+                f"与 data.levels 契约。"
+            )
+        x = self.embed(x.squeeze(1))
+
+        embed_pos = self.embed_positions(x.shape)
+
+        # Transformer 编码器
+        x = self.transformer_encoder(x + embed_pos)
+
+        # 回归读出头（均值池化）
+        x = torch.mean(x, dim=1)
+
+        logits = self.cat_head(x)
+        return logits

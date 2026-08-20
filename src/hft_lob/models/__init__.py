@@ -1,12 +1,11 @@
 """纯模型层：统一 ``forward(x) -> [B, 1]`` 契约（需求文档 §18）。
 
-MVP 模型接口：``cnn1`` / ``deeplob``（§1.1/§17/§39）；MLP 属 baseline。
-其余模型（transformer
-/ itransformer / lobtransformer / cnn2 / axiallob / dla / binbtabl / binctabl /
-hlob）**接口保留、暂不实现**（构造/前向为 ``raise NotImplementedError`` 骨架，
-待 §39 Phase 3-4 分阶段实装）。所有模型均为纯 ``torch.nn.Module``，训练职责由
-``systems.LOBLightningModule`` 统一封装；``build_model`` 是唯一模型工厂，运行时调用
-未实现模型会得到明确的 ``NotImplementedError``。
+模型结构与 lobx 对齐：``cnn1`` / ``deeplob`` / ``cnn2`` / ``transformer`` /
+``itransformer`` / ``lobtransformer`` / ``axiallob`` / ``dla`` / ``binbtabl`` /
+``binctabl`` / ``hlob`` 全部实装（MLP 属 baseline，见 ``hft_lob.baselines``）。
+所有模型均为纯 ``torch.nn.Module``，训练职责由 ``systems.LOBLightningModule``
+统一封装；``build_model`` 是唯一模型工厂，按 ``ExperimentConfig`` + 特征 schema
+实例化模型（``hlob`` 额外需要调用方提供同调结构）。
 """
 
 from __future__ import annotations
