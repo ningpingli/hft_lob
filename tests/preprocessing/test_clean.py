@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 import polars as pl
 
 from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS, SessionConfig
@@ -50,3 +51,28 @@ def test_clean_day_splits_sessions_and_bounds_forward_fill(tmp_path: Path) -> No
     assert afternoon.get_column("book_valid").to_list() == [True]
     assert result.quality_report.duplicate_count == 1
     assert result.quality_report.row_count == 5
+
+
+def test_clean_day_reads_datetime_index_as_timestamp(tmp_path: Path) -> None:
+    """原始时间是 DatetimeIndex，不要求它同时作为普通字段存在。"""
+    path = tmp_path / "20260105.parquet"
+    timestamps = [
+        datetime(2026, 1, 5, 9, 30, 0),
+        datetime(2026, 1, 5, 9, 30, 3),
+    ]
+    rows = [_book_row(timestamp, bid=9.99, ask=10.01) for timestamp in timestamps]
+    pandas_frame = pd.DataFrame(rows).drop(columns="raw_time")
+    pandas_frame.index = pd.DatetimeIndex(timestamps, name="event_time")
+    pandas_frame.to_parquet(path)
+
+    result = DataCleaner(
+        SessionConfig(),
+        snapshot_interval_seconds=3,
+        max_ffill_gap_seconds=6,
+        column_mapping={},
+    ).clean_day(str(path), ticker="000001.SZ")
+
+    morning = result.sessions[0].frame
+    assert morning.schema["timestamp"] == pl.Datetime("us")
+    assert morning.get_column("timestamp").to_list() == timestamps
+    assert "event_time" not in morning.columns

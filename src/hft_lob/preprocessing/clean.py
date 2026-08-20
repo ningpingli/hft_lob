@@ -8,6 +8,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import polars as pl
 
 from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS, SessionConfig
@@ -110,7 +111,7 @@ class DataCleaner:
         if not source_path.is_file():
             raise FileNotFoundError(path)
 
-        frame = pl.read_parquet(source_path)
+        frame = _read_raw_frame(source_path)
         frame = self._apply_column_mapping(frame)
         required = {*RAW_FEATURE_COLUMNS, "timestamp"}
         missing = sorted(required.difference(frame.columns))
@@ -334,6 +335,22 @@ def _parse_clock(value: str) -> time:
         return time.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"invalid session clock: {value!r}") from exc
+
+
+def _read_raw_frame(path: Path) -> pl.DataFrame:
+    """读取原始 Parquet，并将 datetime 索引规范化为内部时间列。
+
+    原始行情文件可由 pandas 以 ``DatetimeIndex`` 写出。时间在这种文件中是
+    行索引而不是业务字段；读取边界负责恢复它，后续 Polars 运算则使用统一的
+    ``timestamp: Datetime`` 列（Polars 不提供独立索引概念）。
+    """
+    pandas_frame = pd.read_parquet(path)
+    if isinstance(pandas_frame.index, pd.DatetimeIndex):
+        if "timestamp" in pandas_frame.columns:
+            raise ValueError("timestamp exists both as a DatetimeIndex and a column")
+        pandas_frame.index.name = "timestamp"
+        pandas_frame = pandas_frame.reset_index()
+    return pl.from_pandas(pandas_frame, include_index=False)
 
 
 def _parse_date(value: Any) -> date | None:
