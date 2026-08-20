@@ -1,87 +1,100 @@
-"""滑窗 torch Dataset：在处理后的 LOB CSV/pt 上构造 (特征窗口, 回归标签) 样本。"""
+"""滑窗 torch Dataset（需求文档 §2/§13）：锚点语义、session 内构造、样本元数据。
+
+职责单一：本模块只做「显式 processed parquet 文件列表 → 锚点滑窗样本」的纯
+采样；文件发现/切分（manifest）与 DataLoader 装配分别属于 preprocessing 与
+systems（LOBDataModule）层。
+"""
 
 from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 import torch
 from torch.utils.data import Dataset
 
-from hft_lob.configs.experiment import ExperimentConfig
+#: 构造样本所需的处理列（元数据侧）。
+_META_COLUMNS: tuple[str, ...] = (
+    "trade_date", "session_id", "seconds", "mid_price", "future_mid",
+    "ASKp1", "BIDp1",
+)
 
-#: 标识盘口特征列的列名前缀。
-_FEATURE_PREFIXES: tuple[str, ...] = ("ASKp", "ASKs", "BIDp", "BIDs")
+
+@dataclass(frozen=True)
+class SampleMeta:
+    """§13 样本元数据（研究 artifact 定位用）。"""
+
+    ticker: str
+    trade_date: str
+    session_id: str
+    anchor_timestamp: str
+    mid_t: float
+    future_mid: float
 
 
 class LOBWindowDataset(Dataset):
-    """滑窗读取处理后的 LOB CSV/pt，返回 ``(1, window_size, n_features)`` 特征
-    + 连续回归标签（``label_columns[label_index]`` 的未来收益）。
+    """对显式 processed parquet 列表构造锚点滑窗样本。
 
-    原 CustomDataset 已删除（无别名）：旧 import 请改为 LOBWindowDataset。
+    锚点语义（§2 样本契约，禁止 ``X=data[i:i+N], y=target[i+N]``）：
+    - ``X = seg[i - window_size + 1 : i + 1]``（**包含 anchor 快照 t**）；
+    - ``y = target[i]``（anchor 行的主标签）；
+    - 窗口与标签只在 same trade_date AND same session_id 内构造（§3.1）；
+    - 窗口内所有行必须 ``valid``（质量标记；含跨 session/超容差标签的行不产生
+      样本）；
+    - 不变量（单元测试必须检查）：``max(timestamp(X)) == anchor_timestamp``。
     """
 
     def __init__(
         self,
-        dataset_root: str,
-        learning_stage: str,
+        file_paths: Sequence[str],
+        *,
+        ticker: str,
         window_size: int,
-        shuffling_seed: int,
-        cache_size: int,
-        lighten: bool,
-        threshold: float,
-        label_columns: list[str],
-        label_index: int = 0,
-        balanced_dataloader: bool = False,
-        backtest: bool = False,
-        training_stocks: list[str] | None = None,
-        validation_stocks: list[str] | None = None,
-        target_stocks: list[str] | None = None,
+        feature_cols: Sequence[str],
+        target_col: str,
+        cache_size: int = 4,
+        feature_mean: torch.Tensor | None = None,
+        feature_std: torch.Tensor | None = None,
     ) -> None:
-        """初始化数据集：展开 CSV/pt 文件并构建滑窗有效样本索引。
-
-        ``label_columns`` 必须非空；训练阶段按 ``shuffling_seed`` 打乱文件，
-        验证/测试阶段按时间顺序读取。
+        """初始化数据集：逐文件逐 session 扫描有效样本并建立索引。
 
         Args:
-            dataset_root: 处理后数据根目录。
-            learning_stage: 学习阶段（training / validation / testing）。
-            window_size: 每个窗口的时间步数。
-            shuffling_seed: 训练集文件随机打乱的种子。
-            cache_size: 文件内存缓存上限（按文件数计）。
-            lighten: 是否仅使用前 5 档（20 个特征列）。
-            threshold: 标签阈值（与 executor 兼容保留）。
-            label_columns: 标签列名列表（显式传入，禁止 f-string 推导）。
-            label_index: 训练目标标签在 label_columns 中的下标。
-            balanced_dataloader: 是否使用平衡采样（回归管线未使用，兼容保留）。
-            backtest: 是否为回测数据集模式。
-            training_stocks: 训练股票列表。
-            validation_stocks: 验证股票列表。
-            target_stocks: 测试股票列表。
+            file_paths: processed parquet 文件列表（升序，时间顺序）。
+            ticker: 股票代码（写入样本元数据）。
+            window_size: 每个窗口的快照数（§2：含 anchor 共 N 帧）。
+            feature_cols: 模型输入特征列（23 原始，或 +派生）。
+            target_col: 主标签列名（§7.1）。
+            cache_size: 文件内存缓存上限（按文件数计，FIFO 逐出）。
+            feature_mean / feature_std: train-only 归一化参数（逐特征列，
+                torch.Tensor）；None 表示不归一化。
+
+        Raises:
+            ValueError: 参数非法（空文件列表 / window_size < 1 / 空特征列 /
+                空标签列）。
         """
         raise NotImplementedError("LOBWindowDataset.__init__ not implemented")
 
+    @property
+    def n_features(self) -> int:
+        """每个快照的特征数。"""
+        raise NotImplementedError("LOBWindowDataset.n_features not implemented")
+
+    @property
+    def feature_cols(self) -> list[str]:
+        """实际使用的特征列名。"""
+        raise NotImplementedError("LOBWindowDataset.feature_cols not implemented")
+
     def __len__(self) -> int:
-        """所有输入文件的累计有效样本数。"""
+        """全部有效样本数。"""
         raise NotImplementedError("LOBWindowDataset.__len__ not implemented")
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """返回第 index 个滑窗样本 (特征张量, 回归标签)。
-
-        Args:
-            index: 全局样本下标。
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, dict[str, object]]:
+        """返回 (特征窗口, 回归标签, 样本元数据)。
 
         Returns:
-            (特征张量, 标签张量)：特征形状为 ``(1, window_size, n_features)``。
+            - 特征窗口：``(1, window_size, n_features)`` float32，含 anchor 帧；
+            - 标签：标量 float32（anchor 行的主标签）；
+            - 元数据：``{ticker, trade_date, session_id, anchor_timestamp,
+              mid_t, future_mid, bid1, ask1}``（§13/§28，研究 artifact 定位用）。
         """
         raise NotImplementedError("LOBWindowDataset.__getitem__ not implemented")
-
-
-def build_dataset_path(config: ExperimentConfig, *, stage: str) -> str:
-    """按配置与阶段推导处理后数据集的目录路径。
-
-    Args:
-        config: 实验配置根（含 dataset 名等路径要素）。
-        stage: 阶段名（training / validation / testing）。
-
-    Returns:
-        该阶段对应的数据目录路径。
-    """
-    raise NotImplementedError("build_dataset_path not implemented")

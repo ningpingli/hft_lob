@@ -1,60 +1,50 @@
-"""单日 LOB 快照数据清洗：raw → cleaned pl.DataFrame。"""
+"""数据清洗（需求文档 §4/§5/§6）：schema 校验、session 分割、秒去重、有界 ffill、mid。"""
 
 from __future__ import annotations
 
 import polars as pl
 
-from hft_lob.data_processing.fields import FieldsConfig
+from hft_lob.configs.experiment import SessionConfig
+from hft_lob.preprocessing.quality import QualityReport
 
 
 class DataCleaner:
-    """按 FieldsConfig 清洗每日原始 parquet/CSV（步骤 1-4）：
+    """单日原始快照 → 规范化 DataFrame（§4 清洗 + §5 缺失策略 + §6 mid）。
 
-    列重映射（column_map）+ 时间字段解析 + 缺失盘口前向填充 + 集合竞价剔除
-    + 跨日列结构一致性校验。
+    输出列约定（processed 中间格式）：``trade_date / session_id / timestamp /
+    seconds`` + 20 盘口 + 3 标量 + ``mid_price / staleness_seconds / is_ffilled /
+    valid``。
+
+    行为契约：
+    - §3 会话分割：按 SessionConfig 划分 AM/PM（半开区间），非连续竞价时段剔除；
+    - §4 秒去重：重复 timestamp 保留同秒最后一条；
+    - §5 有界 ffill：整条盘口缺失时，gap ≤ max_ffill_gap_seconds 才前向填充
+      （价格 + 数量整体，时间不填充），超限行标记 ``valid=False``；
+    - §6 mid：双侧有效取均值，单边取存活侧价格，交叉/双侧无效 → NaN 且
+      ``valid=False``。
     """
 
-    def __init__(self, fields: FieldsConfig) -> None:
+    def __init__(self, sessions: SessionConfig, max_ffill_gap_seconds: int) -> None:
         """初始化清洗器。
 
         Args:
-            fields: 字段配置（column_map 与时间维度），驱动列重映射与时间解析。
+            sessions: 交易时段配置（§3）。
+            max_ffill_gap_seconds: 缺失策略 gap 上限（§5）。
         """
         raise NotImplementedError("DataCleaner.__init__ not implemented")
 
-    def clean_day(self, raw_path: str) -> pl.DataFrame:
-        """清洗单个交易日原始文件，返回规范化后的单日 DataFrame。
+    def clean_day(self, path: str, *, ticker: str) -> tuple[pl.DataFrame, QualityReport]:
+        """清洗单个交易日原始 parquet 文件。
 
         Args:
-            raw_path: 当日原始 parquet/CSV 文件路径。
+            path: 原始 parquet 文件路径（文件名主名 = 交易日）。
+            ticker: 股票代码（原始缺 ``ticker`` 列时填充）。
 
         Returns:
-            清洗后的单日 DataFrame。
+            (清洗后的单日 DataFrame, 质量报告)。
+
+        Raises:
+            FileNotFoundError: 文件不存在。
+            ValueError: 缺少必需列（20 盘口 + timestamp）。
         """
         raise NotImplementedError("DataCleaner.clean_day not implemented")
-
-    def clean_all(self, ticker: str, input_dir: str) -> list[pl.DataFrame]:
-        """清洗 ``input_dir`` 下某只股票的全部交易日文件。
-
-        Args:
-            ticker: 股票代码。
-            input_dir: 存放该股票每日原始文件的目录。
-
-        Returns:
-            按日期排序的单日清洗后 DataFrame 列表。
-        """
-        raise NotImplementedError("DataCleaner.clean_all not implemented")
-
-    @staticmethod
-    def validate_schema_consistency(daily_frames: list[pl.DataFrame]) -> int:
-        """校验跨日列结构一致性，返回结构一致的帧数。
-
-        Args:
-            daily_frames: 多日清洗后的 DataFrame 列表。
-
-        Returns:
-            列结构一致的 DataFrame 数量。
-        """
-        raise NotImplementedError(
-            "DataCleaner.validate_schema_consistency not implemented"
-        )

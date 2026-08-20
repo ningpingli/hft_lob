@@ -1,85 +1,87 @@
-# utils/experiment_manager.py
+"""实验管理（需求文档 §29）：实验 ID 生成/恢复、结果目录、data.yaml 记录。
+
+合并原 ``loggers/`` 包职责（generate_id / find_save_path / logger），消除与
+``utils`` 的重复：实验标识、结果目录与阶段结果 YAML 落盘统一收口在此。
+"""
+
 from __future__ import annotations
 
-from typing import Optional, Any
+import os
+import random
+import re
+import string
+from datetime import datetime
+from typing import Any
+
+#: 结果根目录（cwd 相对）。
+_RESULTS_ROOT = os.path.join("loggers", "results")
+
+#: 实验目录名模式：``loggers/results/<experiment_id>/...``。
+_EXP_ID_IN_PATH = re.compile(r"loggers[\\/]results[\\/]([^\\/]+)[\\/]")
+
+
+def generate_experiment_id(model_name: str, ticker: str) -> str:
+    """生成新实验 ID：``<ticker>_<model>_<YYYY-MM-DD_HH_MM_SS>_<7位随机>``，
+    并创建结果目录（§29）。
+
+    Args:
+        model_name: 模型名。
+        ticker: 股票代码。
+
+    Returns:
+        唯一实验 ID。
+    """
+    random_part = "".join(
+        random.choice(string.ascii_letters + string.digits) for _ in range(7)
+    )
+    init_time = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+    experiment_id = f"{ticker}_{model_name}_{init_time}_{random_part}"
+    os.makedirs(os.path.join(_RESULTS_ROOT, experiment_id), exist_ok=True)
+    return experiment_id
+
+
+def resolve_log_dir(experiment_id: str) -> str:
+    """实验结果目录：``loggers/results/<experiment_id>``。"""
+    return os.path.join(_RESULTS_ROOT, experiment_id)
 
 
 def resolve_experiment_id(
-    config: dict[str, Any],
-    resume_ckpt: Optional[str] = None,
-    override_id: Optional[str] = None,
+    *,
+    model_name: str,
+    ticker: str,
+    override_id: str | None = None,
+    resume_ckpt: str | None = None,
 ) -> str:
-    """
-    解析并生成实验唯一标识符。
-
-    优先级：override_id > resume_ckpt 中提取的 ID > 基于时间戳和模型名生成的新 ID。
+    """解析实验 ID：``override_id`` > 检查点路径中提取 > 新生成。
 
     Args:
-        config: 完整实验配置字典（至少包含 model 字段）。
+        model_name: 模型名。
+        ticker: 股票代码。
+        override_id: 命令行显式指定的实验 ID。
         resume_ckpt: 恢复训练的检查点路径（用于提取原实验 ID）。
-        override_id: 命令行指定的实验 ID（--exp-id）。
 
     Returns:
-        实验唯一标识符字符串（如 "deeplob_20250101_120000"）。
+        实验 ID。
 
     Raises:
-        ValueError: resume_ckpt 存在但无法提取有效 ID 时。
+        ValueError: ``resume_ckpt`` 存在但无法提取有效实验 ID。
     """
-    ...
+    raise NotImplementedError("resolve_experiment_id not implemented")
 
 
-def extract_exp_id_from_ckpt(ckpt_path: str) -> str:
-    """
-    从检查点路径中提取实验 ID。
-
-    支持的路径格式：
-    - ./logs/exp_001/checkpoints/best.ckpt → "exp_001"
-    - ./logs/20250101_120000/checkpoints/last.ckpt → "20250101_120000"
-    - /absolute/path/logs/my_exp/checkpoints/model.ckpt → "my_exp"
-
-    Args:
-        ckpt_path: 检查点文件路径。
-
-    Returns:
-        提取出的实验 ID。
-
-    Raises:
-        ValueError: 路径格式不符合预期，无法提取 ID。
-    """
-    ...
+def extract_exp_id_from_ckpt(ckpt_path: str) -> str | None:
+    """从检查点路径中提取实验 ID（路径须含 ``loggers/results/<id>/`` 段）。"""
+    raise NotImplementedError("extract_exp_id_from_ckpt not implemented")
 
 
-def resolve_log_dir(
-    experiment_id: str,
-    base_log_dir: str = "./logs",
-    suffix: Optional[str] = None,
-) -> str:
-    """
-    解析日志/检查点保存目录路径。
+def write_experiment_log(experiment_id: str, header: str, contents: dict[str, Any]) -> None:
+    """将阶段结果记录到 ``loggers/results/<experiment_id>/data.yaml``。
+
+    文件已存在时按 header 键合并，否则创建新文件（§29 结果可追踪）。
 
     Args:
         experiment_id: 实验 ID。
-        base_log_dir: 日志根目录（默认 "./logs"）。
-        suffix: 可选的子目录后缀（如 "resume" 用于恢复训练）。
-
-    Returns:
-        完整的日志目录路径（如 "./logs/exp_001" 或 "./logs/exp_001/resume"）。
+        header: 记录标题（如 dataset_info）。
+        contents: 记录内容字典。
     """
-    ...
-
-
-def generate_experiment_id(
-    model_name: str,
-    timestamp_format: str = "%Y%m%d_%H%M%S",
-) -> str:
-    """
-    基于模型名和时间戳生成新实验 ID。
-
-    Args:
-        model_name: 模型名称。
-        timestamp_format: 时间戳格式。
-
-    Returns:
-        格式为 "{model_name}_{timestamp}" 的字符串。
-    """
-    ...
+    raise NotImplementedError("write_experiment_log not implemented")

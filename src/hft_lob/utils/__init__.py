@@ -1,16 +1,26 @@
-# utils/__init__.py
-from .config_loader import load_experiment_config, load_model_config
-from .experiment_manager import resolve_experiment_id, resolve_log_dir
-from .logger_builder import build_logger, flatten_config
-from .checkpoint_utils import resolve_ckpt_path, backup_experiment_config
+"""utils 包：配置加载 / 实验 ID / 日志器 / 检查点 / 随机种子。"""
+
+from hft_lob.utils.checkpoint_utils import backup_experiment_config, resolve_ckpt_path
+from hft_lob.utils.config_loader import load_config
+from hft_lob.utils.experiment_manager import (
+    extract_exp_id_from_ckpt,
+    generate_experiment_id,
+    resolve_experiment_id,
+    resolve_log_dir,
+    write_experiment_log,
+)
+from hft_lob.utils.logger_builder import build_logger
+from hft_lob.utils.seed import set_seed
 
 __all__ = [
-    "load_experiment_config",
-    "load_model_config",
+    "backup_experiment_config",
+    "build_logger",
+    "extract_exp_id_from_ckpt",
+    "generate_experiment_id",
+    "load_config",
+    "resolve_ckpt_path",
     "resolve_experiment_id",
     "resolve_log_dir",
-    "build_logger",
-    "flatten_config",
-    "resolve_ckpt_path",
-    "backup_experiment_config",
+    "set_seed",
+    "write_experiment_log",
 ]

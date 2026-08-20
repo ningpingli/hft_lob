@@ -1,149 +1,202 @@
-"""ExperimentConfig：实验超参数 dataclass 组。
+"""ExperimentConfig：单股 LOB 60 秒收益预测系统的实验配置 dataclass 组。
 
-整个流水线的接口面都收 ``ExperimentConfig``，避免到处传递
-``(experiment_id, general, data, loader, training)`` 4 件套。
+按 ``doc/需求文档.md`` §42 冻结的核心规格组织：task / data / target / sessions /
+window / features / normalization / loader / model / training / evaluation / split。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from hft_lob.data_processing.fields import FieldsConfig
+#: A 股连续竞价时段（半开区间 [start, end)）。
+MORNING_SESSION: tuple[str, str] = ("09:30:00", "11:30:00")
+AFTERNOON_SESSION: tuple[str, str] = ("13:00:00", "14:57:00")
 
+#: 特征列契约：20 盘口 + 3 标量（§10 第一版保留原始 23 维）。
+RAW_FEATURE_COLUMNS: tuple[str, ...] = (
+    "ASKp1", "ASKs1", "BIDp1", "BIDs1",
+    "ASKp2", "ASKs2", "BIDp2", "BIDs2",
+    "ASKp3", "ASKs3", "BIDp3", "BIDs3",
+    "ASKp4", "ASKs4", "BIDp4", "BIDs4",
+    "ASKp5", "ASKs5", "BIDp5", "BIDs5",
+    "last", "volume", "amount",
+)
 
-#: 模型 data_features 契约（架构期望的输入形状）：num_features / levels / history_length
-#: 分别与 ExperimentConfig.data 三项逐项校验，构建模型时在 executor.build_model 强制。
-@dataclass(frozen=True)
-class ModelDataFeatures:
-    """模型架构期望的输入形状契约。"""
-
-    num_features: int
-    levels: int
-    history_length: int
-
-
-#: 模型超参数（按 configs/models/<model>.yaml 中 model_params 段读取，schema
-#: 由具体模型类决定，因此这里用 dict 透传）。
-ModelParams = dict[str, Any]
-
-
-@dataclass(frozen=True)
-class GeneralHyperparameters:
-    """实验通用超参数（来自 ``configs/experiment.yaml`` general 段）。"""
-
-    experiment_id: str
-    dataset: str
-    model: str
-    training_stocks: list[str]
-    target_stocks: list[str]
-    normalization_window: int
-    horizons: list[int]
-    label_columns: dict[str, list[str]]
-    prediction_label_type: str
-    prediction_label: str
-    training_ratio: float
-    validation_ratio: float
-    test_ratio: float
-    stages: list[str]
-    include_target_stock_in_training: bool
-    max_days: int | None = None
+#: 盘口价格列（整条盘口缺失判定 / 质量检查用）。
+PRICE_COLUMNS: tuple[str, ...] = tuple(
+    c for c in RAW_FEATURE_COLUMNS if c.startswith(("ASKp", "BIDp"))
+)
 
 
 @dataclass(frozen=True)
-class DataHyperparameters:
-    """数据侧超参数（来自 ``configs/experiment.yaml`` data 段）。"""
+class TaskConfig:
+    """任务定义：单只股票、回归（§0）。"""
 
-    num_features: int
-    levels: int
-    window_size: int
-    prediction_horizon: int
-    threshold: float
-    fields: FieldsConfig
+    ticker: str
+    task_type: str = "regression"
 
 
 @dataclass(frozen=True)
-class LoaderHyperparameters:
-    """DataLoader 超参数（来自 ``configs/experiment.yaml`` loader 段）。"""
+class DataConfig:
+    """数据规格与目录（§30 目录分层：raw immutable，split 用 manifest 表达）。"""
 
-    batch_size: int
-    num_workers: int
-    shuffling_seed: int
-    balanced_sampling: bool = False
-
-
-@dataclass(frozen=True)
-class OptimizerHyperparameters:
-    """训练优化器超参数（嵌套在 ``training.optimizer`` 段）。"""
-
-    betas: tuple[float, float]
-    weight_decay: float
+    levels: int = 5
+    snapshot_interval_seconds: int = 3
+    raw_dir: str = "data/raw"  # 原始 parquet 根目录（只读，immutable）
+    processed_dir: str = "data/processed"  # 清洗 + 特征 + 标签落盘根目录
+    manifest_dir: str = "data/datasets"  # split manifest 根目录
 
 
 @dataclass(frozen=True)
-class TrainingHyperparameters:
-    """训练超参数（来自 ``configs/experiment.yaml`` training 段）。"""
+class TargetConfig:
+    """标签定义（§7）：60 秒中间价对数收益，future 匹配容差 3 秒（§7.2）。"""
 
-    epochs: int
-    log_interval_epochs: int
-    learning_rate: float
-    patience: int
-    loss: str
-    loss_huber_delta: float
-    optimizer: OptimizerHyperparameters
+    type: str = "log_mid_return"  # log_mid_return | simple_mid_return
+    horizon_seconds: int = 60
+    tolerance_seconds: int = 3
 
 
 @dataclass(frozen=True)
-class TradingHyperparameters:
-    """回测超参数（来自 ``configs/experiment.yaml`` trading 段）。"""
+class SessionConfig:
+    """交易时段（§3）；窗口与标签禁止跨 session。"""
 
-    initial_cash: float
-    trading_fee: float
-    mid_side_trading: str
-    simulation_type: str
-    probability_threshold: float
+    morning: tuple[str, str] = MORNING_SESSION
+    afternoon: tuple[str, str] = AFTERNOON_SESSION
+    allow_cross_session: bool = False
 
 
 @dataclass(frozen=True)
-class ModelHyperparameters:
-    """模型侧超参数（来自 ``configs/models/<model>.yaml``）。"""
+class WindowConfig:
+    """输入窗口（§2/§9）：快照数；锚点语义 ``X = data[i-N+1 : i+1]`` 含 t 时刻。"""
 
-    name: str
-    data_features: ModelDataFeatures
-    model_params: ModelParams = field(default_factory=dict)
+    history_snapshots: int = 180
+    include_anchor_snapshot: bool = True
+
+    @property
+    def history_seconds(self) -> int:
+        """窗口覆盖的墙钟秒数（快照数 × 3 秒周期）。"""
+        return self.history_snapshots * 3
+
+
+@dataclass(frozen=True)
+class FeatureConfig:
+    """特征（§10/§11）：第一版保留原始 23 维；派生特征 P1 默认关闭。"""
+
+    use_derived: bool = False
+    derived_features: tuple[str, ...] = (
+        "spread", "relative_spread", "mid_price", "microprice",
+        "l1_imbalance", "l5_imbalance", "bid_depth", "ask_depth",
+        "depth_imbalance", "price_slope", "volume_slope",
+    )
+
+
+@dataclass(frozen=True)
+class NormalizationConfig:
+    """归一化（§12）：只允许 t 之前（或 train 段）信息；禁止全量统计。"""
+
+    mode: str = "train_only"  # train_only | causal
+    max_ffill_gap_seconds: int = 6  # §5 缺失策略：gap 上限，超过则标记该段 invalid
+
+
+@dataclass(frozen=True)
+class LoaderConfig:
+    """DataLoader 装配参数。"""
+
+    batch_size: int = 128
+    num_workers: int = 0
+    seed: int = 42
+    pin_memory: bool = False
+    persistent_workers: bool = False
+    prefetch_factor: int | None = None  # None = PyTorch 默认
+    cache_size: int = 4  # LOBWindowDataset 文件内存缓存上限（按文件数计）
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    """模型（§18）：统一 ``forward(x) -> [B, 1]``；MVP 仅 CNN1 / DeepLOB。"""
+
+    name: str = "cnn1"
+    output_dim: int = 1
+    num_features: int | None = None  # None → 由特征工程产出列数决定（契约校验用）
+
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    """训练（§20/§29）：primary loss = huber；全随机种子。"""
+
+    loss: str = "huber"
+    loss_huber_delta: float = 1.0
+    epochs: int = 50
+    patience: int = 10
+    learning_rate: float = 1e-3
+    betas: tuple[float, float] = (0.9, 0.95)
+    weight_decay: float = 1e-5
+    log_interval_epochs: int = 1
+    seed: int = 42
+
+
+@dataclass(frozen=True)
+class EvaluationConfig:
+    """评估指标（§21）：TS-IC / RankIC / MAE / RMSE / Direction + 稳定性。"""
+
+    metrics: tuple[str, ...] = (
+        "mae", "rmse", "ts_ic", "rank_ic", "direction_accuracy",
+    )
+    report_daily: bool = True  # §14：daily metric mean/std/CI，显式处理序列相关
+
+
+@dataclass(frozen=True)
+class SplitConfig:
+    """切分（§15/§16）：chronological（禁止 random row split）；walk-forward 可选。"""
+
+    strategy: str = "chronological"
+    walk_forward: bool = False
+    train_ratio: float = 0.6
+    validation_ratio: float = 0.2
+    train_dates: tuple[str, str] | None = None  # 可选显式日期范围（含两端，%Y-%m-%d）
+    validation_dates: tuple[str, str] | None = None
+    test_dates: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """整个实验的配置根对象。
+    """整个实验的配置根（§42 冻结规格）。"""
 
-    Attributes:
-        general: 实验通用超参数（含 experiment_id 与运行身份）。
-        data: 数据侧超参数。
-        loader: DataLoader 超参数。
-        training: 训练超参数（含优化器嵌套）。
-        trading: 回测超参数。
-        model: 模型侧超参数（含契约 data_features 与可变 model_params）。
-    """
-
-    general: GeneralHyperparameters
-    data: DataHyperparameters
-    loader: LoaderHyperparameters
-    training: TrainingHyperparameters
-    trading: TradingHyperparameters
-    model: ModelHyperparameters
-
-    @property
-    def experiment_id(self) -> str:
-        """便捷访问实验 ID（lobx 调用方最常读）。"""
-        return self.general.experiment_id
+    experiment_id: str
+    task: TaskConfig
+    data: DataConfig
+    target: TargetConfig
+    sessions: SessionConfig
+    window: WindowConfig
+    features: FeatureConfig
+    normalization: NormalizationConfig
+    loader: LoaderConfig
+    model: ModelConfig
+    training: TrainingConfig
+    evaluation: EvaluationConfig
+    split: SplitConfig
+    seed: int = 42
 
     @property
-    def dataset(self) -> str:
-        """便捷访问数据集名。"""
-        return self.general.dataset
+    def ticker(self) -> str:
+        """便捷访问：任务股票代码。"""
+        return self.task.ticker
 
     @property
     def model_name(self) -> str:
-        """便捷访问模型名（架构分发键）。"""
-        return self.general.model
+        """便捷访问：模型名。"""
+        return self.model.name
+
+    @property
+    def feature_count(self) -> int:
+        """模型输入特征数：23 原始；开启派生特征后追加（§10/§11）。"""
+        n = len(RAW_FEATURE_COLUMNS)
+        if self.features.use_derived:
+            n += len(self.features.derived_features)
+        return n
+
+    @property
+    def target_column(self) -> str:
+        """主标签列名（§7.1：唯一 primary target）。"""
+        short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
+        return f"Target_{self.target.horizon_seconds}s_{short}"

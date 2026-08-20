@@ -1,46 +1,69 @@
-"""数据切分：processed CSV → train/validation/test 三段目录（步骤 9）。"""
+"""chronological split（需求文档 §15/§16）：按完整交易日切分；walk-forward 支持。"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from hft_lob.configs.experiment import SplitConfig
+
 
 @dataclass(frozen=True)
-class SplitResult:
-    """切分结果：三段文件路径列表与生效的 max_days。"""
+class ChronologicalSplit:
+    """chronological 切分结果（§15：max(train) < min(val) < min(test)）。"""
 
-    training_files: list[str]
-    validation_files: list[str]
-    test_files: list[str]
-    max_days: int | None
+    train_dates: list[str]
+    validation_dates: list[str]
+    test_dates: list[str]
+
+    def dates_for(self, stage: str) -> list[str]:
+        """按阶段名（training / validation / test）取日期列表。"""
+        return {
+            "training": self.train_dates,
+            "validation": self.validation_dates,
+            "test": self.test_dates,
+        }[stage]
 
 
-def split_into_stages(
-    *,
-    dataset_root: str,
-    training_stocks: list[str],
-    target_stocks: list[str],
-    training_ratio: float,
-    validation_ratio: float,
-    include_target_stock_in_training: bool,
-    max_days: int | None = None,
-) -> SplitResult:
-    """按比例把处理后的每日 CSV 划分为 train/validation/test 三段（步骤 9）。
+@dataclass(frozen=True)
+class Fold:
+    """walk-forward 的一个折（§16）。"""
 
-    只计算并返回三段文件路径，不移动/删除文件；目标股票按比例切三份
-    （``include_target_stock_in_training`` 决定是否排除出训练段），
-    其余训练股票整体归入训练段。
+    index: int
+    train_dates: list[str]
+    validation_dates: list[str]
+    test_dates: list[str]
+
+
+def chronological_split(dates: list[str], config: SplitConfig) -> ChronologicalSplit:
+    """按完整交易日 chronological 切分（§15）。
+
+    优先使用显式日期范围（``train_dates / validation_dates / test_dates``，
+    %Y-%m-%d，含两端），否则按 ``train_ratio / validation_ratio`` 切分
+    （test 为余数）。``dates`` 为升序 %Y-%m-%d 列表。
 
     Args:
-        dataset_root: 处理后数据根目录。
-        training_stocks: 用于训练的股票列表。
-        target_stocks: 用于验证与测试的目标股票列表。
-        training_ratio: 训练数据比例。
-        validation_ratio: 验证数据比例。
-        include_target_stock_in_training: 目标股票是否包含进训练集。
-        max_days: 仅使用最近 max_days 个交易日划分；None 表示全部。
+        dates: 全部交易日（升序）。
+        config: 切分配置。
 
     Returns:
-        三段文件路径列表的切分结果。
+        三段日期切分结果。
+
+    Raises:
+        ValueError: 三段日期有重叠或未覆盖全部日期。
     """
-    raise NotImplementedError("split_into_stages not implemented")
+    raise NotImplementedError("chronological_split not implemented")
+
+
+def walk_forward_folds(dates: list[str], config: SplitConfig) -> list[Fold]:
+    """生成 walk-forward 折（§16）：训练扩张、以自然月滚动 val/test。
+
+    每个折：val = 上一个月，test = 当月，train = 更早的全部交易日。
+
+    Args:
+        dates: 升序 %Y-%m-%d 列表。
+        config: 切分配置。
+
+    Returns:
+        折列表（index 从 1 开始）。
+    """
+    raise NotImplementedError("walk_forward_folds not implemented")

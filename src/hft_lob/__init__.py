@@ -1,10 +1,9 @@
-"""hft_lob：LOB 深度学习预测 / HLOB 框架（lobx 接口骨架移植）。"""
+"""hft_lob：单股 5 档 LOB 60 秒收益率预测系统（需求文档见 doc/需求文档.md）。"""
 
 from __future__ import annotations
 
+from hft_lob.main import main
+
 __version__ = "0.1.0"
 
-
-def main() -> None:
-    """CLI 入口点（接口占位，待后续阶段实装）。"""
-    raise NotImplementedError("main not implemented")
+__all__ = ["main"]

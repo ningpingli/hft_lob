@@ -1,0 +1,78 @@
+# hft_lob 实验配置（需求文档 §42 冻结的核心规格）
+#
+# 阶段（main.py --stages）：data_processing → dataset_preparation → training → evaluation
+
+task:
+  ticker: "000001"            # 单只股票（§1.1）
+  task_type: regression
+
+data:
+  levels: 5                   # 5 档盘口
+  snapshot_interval_seconds: 3
+  raw_dir: data/raw           # 原始 parquet 根目录（immutable，只读）
+  processed_dir: data/processed
+  manifest_dir: data/datasets
+
+target:
+  type: log_mid_return        # 主标签：log(mid[t+60]/mid[t])（§7.1）
+  horizon_seconds: 60
+  tolerance_seconds: 3        # future 匹配容差（§7.2）
+
+sessions:
+  morning: ["09:30:00", "11:30:00"]
+  afternoon: ["13:00:00", "14:57:00"]
+  allow_cross_session: false  # 窗口/标签禁止跨 session（§3）
+
+window:
+  history_snapshots: 180      # 快照数；180×3s = 540s = 9 分钟历史（§9）
+  include_anchor_snapshot: true  # 输入窗口包含 t 时刻快照（§2）
+
+features:
+  use_derived: false          # 第一版保留原始 23 维（§10）；P1 派生特征默认关闭（§11）
+  derived_features: [spread, relative_spread, mid_price, microprice, l1_imbalance,
+                     l5_imbalance, bid_depth, ask_depth, depth_imbalance,
+                     price_slope, volume_slope]
+
+normalization:
+  mode: train_only            # train-only（§12 默认）；causal 待接入
+  max_ffill_gap_seconds: 6    # 缺失策略：gap 超限标记 invalid（§5）
+
+loader:
+  batch_size: 128
+  num_workers: 0
+  seed: 42
+  pin_memory: false
+  persistent_workers: false
+  prefetch_factor: null
+  cache_size: 4
+
+model:
+  name: cnn1                  # MVP：cnn1 | deeplob（§18/§39）
+  output_dim: 1
+  num_features: null          # null → 由特征工程决定（23 或 +派生）
+
+training:
+  loss: huber                 # primary：Huber（§20）
+  loss_huber_delta: 1.0
+  epochs: 50
+  patience: 10
+  learning_rate: 0.001
+  betas: [0.9, 0.95]
+  weight_decay: 0.00001
+  log_interval_epochs: 1
+  seed: 42
+
+evaluation:
+  metrics: [mae, rmse, ts_ic, rank_ic, direction_accuracy]  # §21
+  report_daily: true          # §14：daily mean/std/ICIR（序列相关处理）
+
+split:
+  strategy: chronological     # 按完整交易日切分，禁止 random row split（§15）
+  walk_forward: false
+  train_ratio: 0.6
+  validation_ratio: 0.2
+  train_dates: null           # 可选显式日期范围 ["2025-01-01", "2025-08-31"]
+  validation_dates: null
+  test_dates: null
+
+seed: 42                      # 全局随机种子（§29 全种子）
