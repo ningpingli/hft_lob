@@ -1,0 +1,67 @@
+[project]
+name = "hft_lob"
+version = "0.1.0"
+description = "Limit order book (LOB) deep-learning forecasting / HLOB framework — interface skeleton ported from lobx"
+readme = "README.md"
+authors = [
+    { name = "liningping", email = "728359849@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.0",
+    "lightning>=2.0",
+    "wandb>=0.15",
+    "polars>=0.19",
+    "pyarrow>=14.0",  # required by polars.to_pandas() used in CustomDataset
+    "torchmetrics>=1.0",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "scikit-learn",
+    "scipy",
+    "networkx",
+    "tqdm",
+    "pyyaml",
+    "fast_tmfg",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff", "mypy>=1.0"]
+
+[project.scripts]
+hft_lob = "hft_lob:main"
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Interface-skeleton package layout — `src/hft_lob/` is the import root.
+# pytest auto-discovers via editable install; add `src` explicitly for direct
+# `python -m pytest` runs.
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+# mypy config: see hermes-dsh-collab spec — business code strict; external
+# library boundaries (torch / lightning / wandb / polars) may use `Any` via
+# explicit `type: ignore[import-untyped]` or per-module overrides.
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = true
+files = ["src/hft_lob"]
