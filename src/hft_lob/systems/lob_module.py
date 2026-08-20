@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import lightning.pytorch as L
+import numpy as np
 import torch
 from torch import nn
 
 from hft_lob.configs.experiment import ExperimentConfig
-from hft_lob.datasets.lob_dataset import LOBBatch
+from hft_lob.datasets.lob_dataset import LOBBatch, SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.losses import build_loss
+from hft_lob.systems.metrics import evaluate
 
 
 class LOBLightningModule(L.LightningModule):
@@ -28,55 +33,193 @@ class LOBLightningModule(L.LightningModule):
         model: nn.Module,
         config: ExperimentConfig,
         *,
-        artifact_dir: str | None = None,
         dataset_version: str | None = None,
         model_version: str = "unknown",
+        fold_index: int | None = None,
+        prediction_split: str = "test",
     ) -> None:
         """初始化 LightningModule。
 
         Args:
             model: 待训练的模型（forward(x) -> [B, 1]）。
             config: 实验配置根（training/evaluation 段）。
-            artifact_dir: 预测产物落盘目录（None 不落盘）。
             dataset_version: 数据集版本标识（§31）。
             model_version: 模型版本标识（§29）。
+            fold_index: 当前 walk-forward fold 编号；生成 artifact 时必须提供。
+            prediction_split: ``predict_step`` 生成 artifact 所属 split。
         """
         super().__init__()
         self.save_hyperparameters(ignore=["model"])
         self.model = model
         self.config = config
+        self.dataset_version = dataset_version
+        self.model_version = model_version
+        self.fold_index = fold_index
+        self.prediction_split = prediction_split
+        self.loss_fn = build_loss(
+            config.training.loss,
+            huber_delta=config.training.loss_huber_delta,
+        )
+        self._validation_predictions: list[torch.Tensor] = []
+        self._validation_targets: list[torch.Tensor] = []
+        self._test_predictions: list[torch.Tensor] = []
+        self._test_targets: list[torch.Tensor] = []
+        self._test_metadata: list[SampleMeta] = []
+        self.test_artifact: PredictionArtifact | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向：委托内部模型（§18 契约）。"""
-        raise NotImplementedError("LOBLightningModule.forward not implemented")
+        if x.ndim != 3:
+            raise ValueError(f"model input must have shape [B,T,F], got {tuple(x.shape)}")
+        predictions = self.model(x)
+        if not isinstance(predictions, torch.Tensor):
+            raise TypeError("model.forward must return a torch.Tensor")
+        if predictions.shape != (x.shape[0], 1):
+            raise ValueError(
+                f"model output must have shape [B,1], got {tuple(predictions.shape)}"
+            )
+        return predictions
 
     def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """训练步：回归损失（§20）。"""
-        raise NotImplementedError("LOBLightningModule.training_step not implemented")
+        predictions, targets = self._shared_step(batch)
+        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        self.log(
+            "train/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=targets.shape[0],
+        )
+        return loss
 
     def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """验证步：累积 preds/targets（epoch 端统一计算指标）。"""
-        raise NotImplementedError("LOBLightningModule.validation_step not implemented")
+        predictions, targets = self._shared_step(batch)
+        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        self._validation_predictions.append(predictions.detach().cpu())
+        self._validation_targets.append(targets.detach().cpu())
+        self.log(
+            "val/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=targets.shape[0],
+            sync_dist=True,
+        )
+        return loss
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """测试步：累积 preds/targets/meta（供 artifact 与日级指标，§28）。"""
-        raise NotImplementedError("LOBLightningModule.test_step not implemented")
+        predictions, targets = self._shared_step(batch)
+        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        self._test_predictions.append(predictions.detach().cpu())
+        self._test_targets.append(targets.detach().cpu())
+        self._test_metadata.extend(batch.metadata)
+        self.log(
+            "test/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            batch_size=targets.shape[0],
+            sync_dist=True,
+        )
+        return loss
 
     def on_validation_epoch_end(self) -> None:
         """验证期结束：整 epoch 计算指标，并以 ``val/<metric>`` 记录。
 
         TS-IC 的稳定 key 为 ``val/ts_ic``，供 checkpoint 与 early stopping 使用。
         """
-        raise NotImplementedError("LOBLightningModule.on_validation_epoch_end not implemented")
+        if not self._validation_predictions:
+            return
+        predictions = torch.cat(self._validation_predictions)[:, 0].numpy()
+        targets = torch.cat(self._validation_targets)[:, 0].numpy()
+        metrics = evaluate(predictions, targets)
+        for name in self.config.evaluation.metrics:
+            if name not in metrics:
+                raise ValueError(f"unsupported validation metric: {name!r}")
+            self.log(
+                f"val/{name}",
+                torch.tensor(metrics[name], dtype=torch.float32, device=self.device),
+                on_step=False,
+                on_epoch=True,
+                prog_bar=name == "ts_ic",
+                sync_dist=True,
+            )
+        self._validation_predictions.clear()
+        self._validation_targets.clear()
 
     def on_test_epoch_end(self) -> None:
         """测试期结束：只汇集预测记录；评估与落盘由外部统一处理。"""
-        raise NotImplementedError("LOBLightningModule.on_test_epoch_end not implemented")
+        if not self._test_predictions:
+            self.test_artifact = None
+            return
+        self.test_artifact = self._make_artifact(
+            predictions=torch.cat(self._test_predictions),
+            targets=torch.cat(self._test_targets),
+            metadata=tuple(self._test_metadata),
+            split="test",
+        )
+        self._test_predictions.clear()
+        self._test_targets.clear()
+        self._test_metadata.clear()
 
     def predict_step(self, batch: LOBBatch, batch_idx: int) -> PredictionArtifact:
         """生成带完整 metadata 的 batch 级预测产物。"""
-        raise NotImplementedError("LOBLightningModule.predict_step not implemented")
+        predictions, targets = self._shared_step(batch)
+        return self._make_artifact(
+            predictions=predictions.detach().cpu(),
+            targets=targets.detach().cpu(),
+            metadata=batch.metadata,
+            split=self.prediction_split,
+        )
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """AdamW（参数来自 training 段；无 scheduler）。"""
-        raise NotImplementedError("LOBLightningModule.configure_optimizers not implemented")
+        training = self.config.training
+        if training.learning_rate <= 0 or training.weight_decay < 0:
+            raise ValueError("learning_rate must be > 0 and weight_decay must be >= 0")
+        return torch.optim.AdamW(
+            self.parameters(),
+            lr=training.learning_rate,
+            betas=training.betas,
+            weight_decay=training.weight_decay,
+        )
+
+    def _shared_step(self, batch: LOBBatch) -> tuple[torch.Tensor, torch.Tensor]:
+        if batch.features.ndim != 3:
+            raise ValueError("batch features must have shape [B,T,F]")
+        targets = batch.targets
+        if targets.ndim != 2 or targets.shape != (batch.features.shape[0], 1):
+            raise ValueError("batch targets must have shape [B,1]")
+        if len(batch.metadata) != batch.features.shape[0]:
+            raise ValueError("batch metadata count must match batch size")
+        if not torch.isfinite(batch.features).all() or not torch.isfinite(targets).all():
+            raise ValueError("batch features and targets must be finite")
+        return self(batch.features), targets
+
+    def _make_artifact(
+        self,
+        *,
+        predictions: torch.Tensor,
+        targets: torch.Tensor,
+        metadata: tuple[SampleMeta, ...],
+        split: str,
+    ) -> PredictionArtifact:
+        if self.dataset_version is None or not self.dataset_version.strip():
+            raise RuntimeError("dataset_version is required to generate prediction artifacts")
+        if self.fold_index is None or self.fold_index <= 0:
+            raise RuntimeError("positive fold_index is required to generate prediction artifacts")
+        return PredictionArtifact(
+            predictions=np.asarray(predictions[:, 0].detach().cpu(), dtype=np.float64),
+            targets=np.asarray(targets[:, 0].detach().cpu(), dtype=np.float64),
+            metadata=metadata,
+            model_name=self.config.model.name,
+            model_version=self.model_version,
+            dataset_version=self.dataset_version,
+            fold_index=self.fold_index,
+            split=split,
+        )
