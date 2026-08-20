@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
-from hft_lob.configs.experiment import SplitConfig
+from hft_lob.configs.experiment import SplitConfig, WalkForwardConfig
 
 
 @dataclass(frozen=True)
@@ -17,11 +18,15 @@ class ChronologicalSplit:
 
     def dates_for(self, stage: str) -> list[str]:
         """按阶段名（training / validation / test）取日期列表。"""
-        return {
+        stages = {
             "training": self.train_dates,
             "validation": self.validation_dates,
             "test": self.test_dates,
-        }[stage]
+        }
+        try:
+            return list(stages[stage])
+        except KeyError as exc:
+            raise ValueError(f"unsupported split stage: {stage!r}") from exc
 
 
 @dataclass(frozen=True)
@@ -59,13 +64,45 @@ def chronological_split(dates: list[str], config: SplitConfig) -> ChronologicalS
     Raises:
         ValueError: 三段日期有重叠或未覆盖全部日期。
     """
-    raise NotImplementedError("chronological_split not implemented")
+    _validate_dates(dates)
+    selected = list(dates)
+    explicit_ranges = (config.train_dates, config.validation_dates, config.test_dates)
+    has_explicit = [value is not None for value in explicit_ranges]
+    if any(has_explicit) and not all(has_explicit):
+        raise ValueError(
+            "train_dates, validation_dates and test_dates must be configured together"
+        )
+
+    if all(has_explicit):
+        train_range = _validate_range(config.train_dates, field="split.train_dates")
+        validation_range = _validate_range(
+            config.validation_dates, field="split.validation_dates"
+        )
+        test_range = _validate_range(config.test_dates, field="split.test_dates")
+        train = _dates_in_range(selected, train_range)
+        validation = _dates_in_range(selected, validation_range)
+        test = _dates_in_range(selected, test_range)
+        assigned = [*train, *validation, *test]
+        if sorted(assigned) != selected or len(set(assigned)) != len(selected):
+            raise ValueError(
+                "explicit split ranges must cover every selected date exactly once"
+            )
+    else:
+        train_end = int(len(selected) * config.train_ratio)
+        validation_end = train_end + int(len(selected) * config.validation_ratio)
+        train = selected[:train_end]
+        validation = selected[train_end:validation_end]
+        test = selected[validation_end:]
+
+    _validate_partition(train, validation, test)
+    return ChronologicalSplit(train, validation, test)
 
 
-def walk_forward_folds(dates: list[str], config: SplitConfig) -> list[Fold]:
-    """生成 walk-forward 折（§16）：训练扩张、以自然月滚动 val/test。
+def walk_forward_folds(dates: list[str], config: WalkForwardConfig) -> list[Fold]:
+    """按交易日数量生成固定训练窗口的 walk-forward 折（§16）。
 
-    每个折：val = 上一个月，test = 当月，train = 更早的全部交易日。
+    每个折依次包含固定长度 train/validation/test，下一折整体向前移动
+    ``step_days``。训练窗口不会扩张，只保留最近 ``train_window_days``。
 
     Args:
         dates: 升序 %Y-%m-%d 列表。
@@ -74,4 +111,79 @@ def walk_forward_folds(dates: list[str], config: SplitConfig) -> list[Fold]:
     Returns:
         折列表（index 从 1 开始）。
     """
-    raise NotImplementedError("walk_forward_folds not implemented")
+    _validate_dates(dates)
+    selected = list(dates)
+    required_days = (
+        config.train_window_days
+        + config.validation_window_days
+        + config.test_window_days
+    )
+    if len(selected) < required_days:
+        raise ValueError(
+            f"walk-forward requires at least {required_days} trade dates, got {len(selected)}"
+        )
+
+    folds: list[Fold] = []
+    fold_start = 0
+    while fold_start + required_days <= len(selected):
+        train_end = fold_start + config.train_window_days
+        validation_end = train_end + config.validation_window_days
+        test_end = validation_end + config.test_window_days
+        train = selected[fold_start:train_end]
+        validation = selected[train_end:validation_end]
+        test = selected[validation_end:test_end]
+        _validate_partition(train, validation, test)
+        folds.append(Fold(len(folds) + 1, train, validation, test))
+        fold_start += config.step_days
+    return folds
+
+
+def _validate_dates(dates: list[str]) -> list[date]:
+    if not dates:
+        raise ValueError("dates must not be empty")
+    parsed = [_parse_iso_date(value, field="dates") for value in dates]
+    if parsed != sorted(parsed):
+        raise ValueError("dates must be sorted ascending")
+    if len(set(parsed)) != len(parsed):
+        raise ValueError("dates must contain unique trade dates")
+    return parsed
+
+
+def _parse_iso_date(value: str, *, field: str) -> date:
+    try:
+        parsed = date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must use YYYY-MM-DD: {value!r}") from exc
+    if parsed.isoformat() != value:
+        raise ValueError(f"{field} must use YYYY-MM-DD: {value!r}")
+    return parsed
+
+
+def _validate_range(
+    value: tuple[str, str] | None,
+    *,
+    field: str,
+) -> tuple[date, date]:
+    if value is None:
+        raise ValueError(f"{field} is required")
+    start = _parse_iso_date(value[0], field=field)
+    end = _parse_iso_date(value[1], field=field)
+    if start > end:
+        raise ValueError(f"{field} start must be <= end")
+    return start, end
+
+
+def _dates_in_range(values: list[str], bounds: tuple[date, date]) -> list[str]:
+    start, end = bounds
+    return [value for value in values if start <= date.fromisoformat(value) <= end]
+
+
+def _validate_partition(
+    train: list[str],
+    validation: list[str],
+    test: list[str],
+) -> None:
+    if not train or not validation or not test:
+        raise ValueError("training, validation and test must each contain at least one date")
+    if not max(train) < min(validation) < min(test):
+        raise ValueError("split must satisfy max(train) < min(validation) < min(test)")

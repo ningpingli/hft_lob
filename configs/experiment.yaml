@@ -109,11 +109,19 @@ evaluation:
 
 split:
   strategy: chronological     # 按完整交易日切分，禁止 random row split（§15）
-  walk_forward: true          # MVP 冻结规格：必须执行 walk-forward（§16/§42）
   train_ratio: 0.6
   validation_ratio: 0.2
   train_dates: null           # 可选显式日期范围 ["2025-01-01", "2025-08-31"]
   validation_dates: null
   test_dates: null
+
+walk_forward:
+  enabled: true               # 生成固定的完整 walk-forward 方案
+  train_window_days: 60       # 每折固定使用最近60个交易日训练
+  validation_window_days: 20  # 验证窗口交易日数
+  test_window_days: 20        # 测试窗口交易日数
+  step_days: 20               # 相邻 folds 向前移动的交易日数
+  start_fold: 1               # 从第几个 fold 开始执行，编号从1开始
+  num_folds: null             # 连续执行多少个 fold；例如3表示仅训练/评估3折
 
 seed: 42                      # 全局随机种子（§29 全种子）

@@ -16,6 +16,7 @@ from hft_lob.configs.experiment import (
     TargetConfig,
     TaskConfig,
     TrainingConfig,
+    WalkForwardConfig,
     WindowConfig,
 )
 from hft_lob.configs.loader import load_config
@@ -36,6 +37,7 @@ __all__ = [
     "TargetConfig",
     "TaskConfig",
     "TrainingConfig",
+    "WalkForwardConfig",
     "WindowConfig",
     "load_config",
 ]

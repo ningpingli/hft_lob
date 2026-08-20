@@ -169,15 +169,56 @@ class EvaluationConfig:
 
 @dataclass(frozen=True)
 class SplitConfig:
-    """切分（§15/§16）：chronological（禁止 random row split）；walk-forward 可选。"""
+    """单次 chronological 切分（§15），禁止 random row split。"""
 
     strategy: str = "chronological"
-    walk_forward: bool = True
     train_ratio: float = 0.6
     validation_ratio: float = 0.2
     train_dates: tuple[str, str] | None = None  # 可选显式日期范围（含两端，%Y-%m-%d）
     validation_dates: tuple[str, str] | None = None
     test_dates: tuple[str, str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.strategy != "chronological":
+            raise ValueError("split.strategy must be 'chronological'")
+        if not 0 < self.train_ratio < 1:
+            raise ValueError("split.train_ratio must be between 0 and 1")
+        if not 0 < self.validation_ratio < 1:
+            raise ValueError("split.validation_ratio must be between 0 and 1")
+        if self.train_ratio + self.validation_ratio >= 1:
+            raise ValueError("train_ratio + validation_ratio must be < 1")
+
+
+@dataclass(frozen=True)
+class WalkForwardConfig:
+    """Walk-forward 方案及执行范围（§16）。
+
+    先基于完整历史生成固定 folds，再从 ``start_fold`` 开始执行 ``num_folds``
+    个 fold；执行范围不会截断任何 fold 的训练历史。fold 编号从1开始。
+    """
+
+    enabled: bool = True
+    train_window_days: int = 60
+    validation_window_days: int = 20
+    test_window_days: int = 20
+    step_days: int = 20
+    start_fold: int = 1
+    num_folds: int | None = None
+
+    def __post_init__(self) -> None:
+        window_fields = {
+            "train_window_days": self.train_window_days,
+            "validation_window_days": self.validation_window_days,
+            "test_window_days": self.test_window_days,
+            "step_days": self.step_days,
+        }
+        invalid = [name for name, value in window_fields.items() if value <= 0]
+        if invalid:
+            raise ValueError(f"walk_forward day parameters must be > 0: {invalid}")
+        if self.start_fold <= 0:
+            raise ValueError("walk_forward.start_fold must be > 0")
+        if self.num_folds is not None and self.num_folds <= 0:
+            raise ValueError("walk_forward.num_folds must be > 0")
 
 
 @dataclass(frozen=True)
@@ -199,6 +240,7 @@ class ExperimentConfig:
     training: TrainingConfig
     evaluation: EvaluationConfig
     split: SplitConfig
+    walk_forward: WalkForwardConfig
     seed: int = 42
 
     @property
