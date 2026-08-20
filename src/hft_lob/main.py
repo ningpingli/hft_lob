@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -16,7 +17,6 @@ from hft_lob.utils.experiment_manager import (
     resolve_log_dir,
     write_experiment_log,
 )
-from hft_lob.utils.seed import set_seed
 
 VALID_STAGES: tuple[str, ...] = (
     "prepare-data", "walk-forward", "evaluate", "predict-offline",
@@ -41,6 +41,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=["prepare-data"],
     )
     parser.add_argument("--seed", type=int)
+    parser.add_argument(
+        "--gpu-id",
+        type=int,
+        help="绑定的物理 GPU 编号；设置后进程内部使用 cuda:0",
+    )
     return parser.parse_args(argv)
 
 
@@ -60,6 +65,14 @@ def main() -> None:
     9. build_evaluation_report 输出 EvaluationReport/FoldResult
     """
     args = parse_args()
+    if args.gpu_id is not None:
+        if args.gpu_id < 0:
+            raise ValueError("gpu_id must be >= 0")
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+
+    # 必须在 CUDA_VISIBLE_DEVICES 设置之后导入 torch 相关 seed 模块。
+    from hft_lob.utils.seed import set_seed
+
     provisional_id = args.experiment_id or "pending"
     config = load_config(args.config, experiment_id=provisional_id)
     experiment_id = resolve_experiment_id(

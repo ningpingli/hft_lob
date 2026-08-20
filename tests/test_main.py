@@ -23,6 +23,8 @@ def test_parse_prepare_data_cli() -> None:
             "prepare-data",
             "--seed",
             "7",
+            "--gpu-id",
+            "2",
         ]
     )
 
@@ -30,6 +32,7 @@ def test_parse_prepare_data_cli() -> None:
     assert args.experiment_id == "prepare-1"
     assert args.stages == ["prepare-data"]
     assert args.seed == 7
+    assert args.gpu_id == 2
 
 
 def test_parse_rejects_unknown_stage() -> None:
