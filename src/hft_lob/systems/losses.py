@@ -19,6 +19,17 @@ def build_loss(name: str = "huber", *, huber_delta: float = 1.0) -> nn.Module:
         可按 ``loss(preds, targets) -> 标量 Tensor`` 调用的损失模块。
 
     Raises:
-        ValueError: name 不是 LOSS_NAMES 之一时。
+        ValueError: name 不是 LOSS_NAMES 之一，或 huber_delta 不为正数时。
     """
-    raise NotImplementedError("build_loss not implemented")
+    normalized_name = name.strip().lower()
+
+    if normalized_name == "mse":
+        return nn.MSELoss()
+    if normalized_name == "mae":
+        return nn.L1Loss()
+    if normalized_name == "huber":
+        if huber_delta <= 0:
+            raise ValueError("huber_delta must be > 0")
+        return nn.HuberLoss(delta=huber_delta)
+
+    raise ValueError(f"unsupported loss name: {name!r}; expected one of {LOSS_NAMES}")
