@@ -154,7 +154,14 @@ class LOBDataModule(pl.LightningDataModule):
         super().__init__()
         self.config = config
         self.stage_files = stage_files
-        self.save_hyperparameters(ignore=["standardizer"])
+        # DataModule 配置由实验目录备份；checkpoint 仅保留安全基础标识，避免
+        # PyTorch weights_only 加载反序列化 ExperimentConfig/StageFiles。
+        self.save_hyperparameters(
+            {
+                "dataset_version": stage_files.dataset_version,
+                "fold_index": stage_files.fold_index,
+            }
+        )
 
         self.train_dataset: LOBWindowDataset | None = None
         self.val_dataset: LOBWindowDataset | None = None

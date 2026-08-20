@@ -1,6 +1,7 @@
 """systems 包：训练算法层（LightningModule / 损失 / 指标 / artifact）。"""
 
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
+from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.lob_data_module import LOBDataModule, StageFiles
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.losses import build_loss
@@ -15,6 +16,7 @@ from hft_lob.systems.walk_forward import (
 
 __all__ = [
     "CandidateFoldRun",
+    "DefaultWalkForwardExecutor",
     "EvaluationReport",
     "FoldResult",
     "LOBDataModule",

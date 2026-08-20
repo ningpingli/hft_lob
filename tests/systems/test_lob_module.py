@@ -125,13 +125,16 @@ def test_predict_and_test_use_complete_artifact_contract() -> None:
     module = _module()
     batch = _batch()
 
-    prediction = module.predict_step(batch, 0)
+    module.on_predict_epoch_start()
+    module.predict_step(batch, 0)
+    module.on_predict_epoch_end()
     module.test_step(batch, 0)
     module.on_test_epoch_end()
 
-    assert prediction.predictions.shape == (2,)
-    assert prediction.dataset_version == "dataset-v1"
-    assert prediction.fold_index == 1
+    assert module.prediction_artifact is not None
+    assert module.prediction_artifact.predictions.shape == (2,)
+    assert module.prediction_artifact.dataset_version == "dataset-v1"
+    assert module.prediction_artifact.fold_index == 1
     assert module.test_artifact is not None
     assert module.test_artifact.metadata == batch.metadata
 

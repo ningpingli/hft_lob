@@ -75,6 +75,10 @@ class LOBLightningModule(L.LightningModule):
         self._test_targets: list[torch.Tensor] = []
         self._test_metadata: list[SampleMeta] = []
         self.test_artifact: PredictionArtifact | None = None
+        self._predict_predictions: list[torch.Tensor] = []
+        self._predict_targets: list[torch.Tensor] = []
+        self._predict_metadata: list[SampleMeta] = []
+        self.prediction_artifact: PredictionArtifact | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向：委托内部模型（§18 契约）。"""
@@ -189,15 +193,34 @@ class LOBLightningModule(L.LightningModule):
         self._test_targets.clear()
         self._test_metadata.clear()
 
-    def predict_step(self, batch: LOBBatch, batch_idx: int) -> PredictionArtifact:
-        """生成带完整 metadata 的 batch 级预测产物。"""
+    def predict_step(self, batch: LOBBatch, batch_idx: int) -> None:
+        """累积批级预测；epoch 结束后统一生成不可变 artifact。"""
         predictions, targets = self._shared_step(batch)
-        return self._make_artifact(
-            predictions=predictions.detach().cpu(),
-            targets=targets.detach().cpu(),
-            metadata=batch.metadata,
+        self._predict_predictions.append(predictions.detach().cpu())
+        self._predict_targets.append(targets.detach().cpu())
+        self._predict_metadata.extend(batch.metadata)
+        return None
+
+    def on_predict_epoch_start(self) -> None:
+        """清除上一次 predict 调用残留。"""
+        self._predict_predictions.clear()
+        self._predict_targets.clear()
+        self._predict_metadata.clear()
+        self.prediction_artifact = None
+
+    def on_predict_epoch_end(self) -> None:
+        """将全部 batch 合并成一个 PredictionArtifact。"""
+        if not self._predict_predictions:
+            raise RuntimeError("predict completed without any batches")
+        self.prediction_artifact = self._make_artifact(
+            predictions=torch.cat(self._predict_predictions),
+            targets=torch.cat(self._predict_targets),
+            metadata=tuple(self._predict_metadata),
             split=self.prediction_split,
         )
+        self._predict_predictions.clear()
+        self._predict_targets.clear()
+        self._predict_metadata.clear()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """AdamW（参数来自 training 段；无 scheduler）。"""

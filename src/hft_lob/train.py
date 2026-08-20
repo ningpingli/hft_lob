@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import lightning as L
-import numpy as np
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import Logger
 
@@ -265,21 +264,17 @@ def run_predict(
         raise ValueError("split must not be empty")
     if hasattr(lightning_module, "prediction_split"):
         cast(Any, lightning_module).prediction_split = split
-    outputs = trainer.predict(
+    trainer.predict(
         model=lightning_module,
         datamodule=datamodule,
         ckpt_path=ckpt_path,
     )
-    if outputs is None:
-        raise RuntimeError("predict returned no outputs")
-    artifacts: list[PredictionArtifact] = []
-    for item in outputs:
-        if not isinstance(item, PredictionArtifact):
-            raise RuntimeError("predict must return one PredictionArtifact per batch")
-        artifacts.append(item)
-    if not artifacts:
-        raise RuntimeError("predict must return one PredictionArtifact per batch")
-    return _merge_prediction_artifacts(artifacts, split=split)
+    artifact = getattr(lightning_module, "prediction_artifact", None)
+    if not isinstance(artifact, PredictionArtifact):
+        raise RuntimeError("predict completed without a PredictionArtifact")
+    if artifact.split != split:
+        raise RuntimeError("prediction artifact split does not match requested split")
+    return artifact
 
 
 def _validate_monitor_mode(mode: str) -> None:
@@ -291,33 +286,3 @@ def _require_checkpoint(ckpt_path: str) -> None:
     if not ckpt_path.strip():
         raise ValueError("ckpt_path must not be empty")
 
-
-def _merge_prediction_artifacts(
-    artifacts: list[PredictionArtifact], *, split: str
-) -> PredictionArtifact:
-    first = artifacts[0]
-    identity = (
-        first.model_name,
-        first.model_version,
-        first.dataset_version,
-        first.fold_index,
-    )
-    for artifact in artifacts:
-        current = (
-            artifact.model_name,
-            artifact.model_version,
-            artifact.dataset_version,
-            artifact.fold_index,
-        )
-        if current != identity or artifact.split != split:
-            raise ValueError("prediction batches have inconsistent artifact identity")
-    return PredictionArtifact(
-        predictions=np.concatenate([artifact.predictions for artifact in artifacts]),
-        targets=np.concatenate([artifact.targets for artifact in artifacts]),
-        metadata=tuple(meta for artifact in artifacts for meta in artifact.metadata),
-        model_name=first.model_name,
-        model_version=first.model_version,
-        dataset_version=first.dataset_version,
-        fold_index=first.fold_index,
-        split=split,
-    )
