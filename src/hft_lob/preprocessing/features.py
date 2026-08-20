@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import polars as pl
-
 from hft_lob.configs.experiment import FeatureConfig
+from hft_lob.preprocessing.clean import SessionSegment
 
 
 class FeatureTransformer:
@@ -28,14 +27,17 @@ class FeatureTransformer:
         """模型输入特征列：23 原始；开启派生特征后追加（§10/§11）。"""
         raise NotImplementedError("FeatureTransformer.feature_columns not implemented")
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        """追加派生特征列（若启用）。
+    def transform(self, segment: SessionSegment) -> SessionSegment:
+        """在单个连续 session 内追加派生特征和 ``feature_valid``。
 
         Args:
-            df: 清洗后的单日 DataFrame（须含 20 盘口 + last/volume/amount +
-                mid_price）。
+            segment: 清洗后的单 session 数据；不得同时包含 AM/PM。
 
         Returns:
-            追加派生特征列后的 DataFrame。
+            追加派生特征列及 ``feature_valid`` 后的新 segment。
+
+        Raises:
+            ValueError: frame 中出现多个 trade_date/session_id，或元数据与
+                SessionSegment 不一致。
         """
         raise NotImplementedError("FeatureTransformer.transform not implemented")

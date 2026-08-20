@@ -1,6 +1,6 @@
 """滑窗 torch Dataset（需求文档 §2/§13）：锚点语义、session 内构造、样本元数据。
 
-职责单一：本模块只做「显式 processed parquet 文件列表 → 锚点滑窗样本」的纯
+职责单一：本模块只做「显式单-session processed parquet 文件列表 → 锚点滑窗样本」的纯
 采样；文件发现/切分（manifest）与 DataLoader 装配分别属于 preprocessing 与
 systems（LOBDataModule）层。
 """
@@ -39,8 +39,10 @@ class LOBWindowDataset(Dataset):
     - ``X = seg[i - window_size + 1 : i + 1]``（**包含 anchor 快照 t**）；
     - ``y = target[i]``（anchor 行的主标签）；
     - 窗口与标签只在 same trade_date AND same session_id 内构造（§3.1）；
-    - 窗口内所有行必须 ``valid``（质量标记；含跨 session/超容差标签的行不产生
-      样本）；
+    - 每个 processed 文件只能包含一个 trade_date/session_id；多 session 文件
+      立即拒绝，不能依赖调用方记得 group-by；
+    - 窗口内所有行必须 ``book_valid AND feature_valid``；只有 anchor 行必须
+      ``target_valid``，历史行不因自身未来标签无效而被删除；
     - 不变量（单元测试必须检查）：``max(timestamp(X)) == anchor_timestamp``。
     """
 
@@ -59,7 +61,7 @@ class LOBWindowDataset(Dataset):
         """初始化数据集：逐文件逐 session 扫描有效样本并建立索引。
 
         Args:
-            file_paths: processed parquet 文件列表（升序，时间顺序）。
+            file_paths: 单-session processed parquet 文件列表（升序，时间顺序）。
             ticker: 股票代码（写入样本元数据）。
             window_size: 每个窗口的快照数（§2：含 anchor 共 N 帧）。
             feature_cols: 模型输入特征列（23 原始，或 +派生）。
@@ -69,8 +71,7 @@ class LOBWindowDataset(Dataset):
                 torch.Tensor）；None 表示不归一化。
 
         Raises:
-            ValueError: 参数非法（空文件列表 / window_size < 1 / 空特征列 /
-                空标签列）。
+            ValueError: 参数非法，或任一文件包含多个 trade_date/session_id。
         """
         raise NotImplementedError("LOBWindowDataset.__init__ not implemented")
 

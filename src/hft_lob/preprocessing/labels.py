@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import polars as pl
-
 from hft_lob.configs.experiment import TargetConfig
+from hft_lob.preprocessing.clean import SessionSegment
 
 #: 标签类型 → 列名短名（§7.1；``Target_<h>s_<short>`` 的推导来源）。
 _LABEL_TYPE_SHORT: dict[str, str] = {"log_mid_return": "log", "simple_mid_return": "simple"}
@@ -37,13 +36,17 @@ class LabelTransformer:
         """
         raise NotImplementedError("LabelTransformer.__init__ not implemented")
 
-    def transform(self, df: pl.DataFrame) -> pl.DataFrame:
-        """为清洗后的单日 DataFrame 追加未来中间价与标签列。
+    def transform(self, segment: SessionSegment) -> SessionSegment:
+        """在单个连续 session 内追加未来中间价、标签与 ``target_valid``。
 
         Args:
-            df: 含 ``trade_date / session_id / seconds / mid_price`` 的清洗后数据。
+            segment: 含 ``seconds / mid_price`` 的单 session 数据。
 
         Returns:
-            追加 ``future_mid`` 与双标签列后的 DataFrame（invalid 标签为 null）。
+            追加 ``future_mid``、双标签列和 ``target_valid`` 后的新 segment。
+
+        Raises:
+            ValueError: frame 中出现多个 trade_date/session_id，或元数据与
+                SessionSegment 不一致。
         """
         raise NotImplementedError("LabelTransformer.transform not implemented")

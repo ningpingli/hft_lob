@@ -1,6 +1,6 @@
 """preprocessing 包：LOB 数据清洗、特征、标签、质量、manifest、切分与归一化。"""
 
-from hft_lob.preprocessing.clean import DataCleaner
+from hft_lob.preprocessing.clean import CleanDayResult, DataCleaner, SessionSegment
 from hft_lob.preprocessing.features import FeatureTransformer
 from hft_lob.preprocessing.labels import LabelTransformer, label_column
 from hft_lob.preprocessing.manifest import (
@@ -23,6 +23,7 @@ from hft_lob.preprocessing.split import (
 
 __all__ = [
     "CausalRollingNormalizer",
+    "CleanDayResult",
     "ChronologicalSplit",
     "DataCleaner",
     "FeatureTransformer",
@@ -30,6 +31,7 @@ __all__ = [
     "LabelTransformer",
     "PipelineResult",
     "QualityReport",
+    "SessionSegment",
     "TrainOnlyNormalizer",
     "build_manifest",
     "chronological_split",

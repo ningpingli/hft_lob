@@ -8,7 +8,7 @@ from hft_lob.configs.experiment import FeatureConfig, TargetConfig
 
 #: manifest 列（固定顺序；§31 Data Manifest）。
 _MANIFEST_COLUMNS: tuple[str, ...] = (
-    "ticker", "trade_date", "source_file", "processed_file",
+    "ticker", "trade_date", "session_id", "source_file", "processed_file",
     "row_count", "valid_row_count", "data_start", "data_end",
     "feature_version", "label_version", "quality_status",
 )
