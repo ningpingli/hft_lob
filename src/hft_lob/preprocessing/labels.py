@@ -101,6 +101,11 @@ class LabelTransformer:
             pl.col("timestamp").alias("future_timestamp"),
             pl.col("mid_price").alias("future_mid"),
             pl.col("book_valid").alias("future_book_valid"),
+        ).filter(
+            pl.col("future_book_valid").fill_null(False)
+            & pl.col("future_mid").is_not_null()
+            & pl.col("future_mid").is_finite()
+            & (pl.col("future_mid") > 0)
         ).sort("future_timestamp")
         result = (
             frame.with_columns(
