@@ -151,8 +151,13 @@ class EvaluationConfig:
 
     metrics: tuple[str, ...] = (
         "mae", "rmse", "ts_ic", "rank_ic", "direction_accuracy",
+        "up_precision", "up_recall", "down_precision", "down_recall",
     )
     report_daily: bool = True  # §14：daily metric mean/std/CI，显式处理序列相关
+    prediction_bins: int = 10
+    confidence_level: float = 0.95
+    bootstrap_samples: int = 1_000
+    bootstrap_block_size: int = 20
 
 
 @dataclass(frozen=True)

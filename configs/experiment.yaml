@@ -69,8 +69,13 @@ training:
   seed: 42
 
 evaluation:
-  metrics: [mae, rmse, ts_ic, rank_ic, direction_accuracy]  # §21
+  metrics: [mae, rmse, ts_ic, rank_ic, direction_accuracy,
+            up_precision, up_recall, down_precision, down_recall]  # §21
   report_daily: true          # §14：daily mean/std/ICIR（序列相关处理）
+  prediction_bins: 10         # §23：预测值十分位分桶
+  confidence_level: 0.95      # §14：指标置信区间
+  bootstrap_samples: 1000
+  bootstrap_block_size: 20    # 60s / 3s，避免使用 IID bootstrap
 
 split:
   strategy: chronological     # 按完整交易日切分，禁止 random row split（§15）
