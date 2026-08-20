@@ -63,7 +63,10 @@ class LOBLightningModule(L.LightningModule):
         raise NotImplementedError("LOBLightningModule.test_step not implemented")
 
     def on_validation_epoch_end(self) -> None:
-        """验证期结束：整 epoch 计算指标并 log（§21）。"""
+        """验证期结束：整 epoch 计算指标，并以 ``val/<metric>`` 记录。
+
+        TS-IC 的稳定 key 为 ``val/ts_ic``，供 checkpoint 与 early stopping 使用。
+        """
         raise NotImplementedError("LOBLightningModule.on_validation_epoch_end not implemented")
 
     def on_test_epoch_end(self) -> None:

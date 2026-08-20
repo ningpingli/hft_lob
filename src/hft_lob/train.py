@@ -24,8 +24,9 @@ from hft_lob.systems.metrics import EvaluationReport
 
 def build_checkpoint_callback(
     log_dir: str,
-    monitor: str = "val_ic",
-    mode: str = "max",
+    *,
+    monitor: str,
+    mode: str,
     save_top_k: int = 1,
     filename: str = "best_val_model",
 ) -> Callback:
@@ -46,10 +47,11 @@ def build_checkpoint_callback(
 
 
 def build_early_stopping_callback(
-    monitor: str = "val_ic",
+    *,
+    monitor: str,
+    mode: str,
     patience: int = 20,
     min_delta: float = 0.001,
-    mode: str = "max",
     check_finite: bool = False,
 ) -> Callback:
     """

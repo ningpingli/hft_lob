@@ -131,29 +131,6 @@ def evaluate(preds: np.ndarray, targets: np.ndarray) -> dict[str, float]:
     raise NotImplementedError("evaluate not implemented")
 
 
-def evaluate_by_day(
-    preds: np.ndarray, targets: np.ndarray, trade_dates: np.ndarray
-) -> dict[str, float]:
-    """日级稳定性汇总（§14/§21）：daily 指标 mean/std + ICIR + Positive Day Ratio。
-
-    3 秒采样 × 60 秒 horizon 的标签高度重叠（§14），日级聚合是处理序列相关的
-    最小要求；每日先算 TS-IC，再聚合。
-
-    Returns:
-        ``{daily_ic_mean, daily_ic_std, icir, positive_ic_day_ratio}``。
-    """
-    raise NotImplementedError("evaluate_by_day not implemented")
-
-
-def daily_metric_records(
-    preds: np.ndarray,
-    targets: np.ndarray,
-    trade_dates: np.ndarray,
-) -> tuple[DailyMetricRecord, ...]:
-    """逐交易日计算完整指标并保留日期、样本量与指标明细。"""
-    raise NotImplementedError("daily_metric_records not implemented")
-
-
 def prediction_quantile_bins(
     preds: np.ndarray,
     targets: np.ndarray,

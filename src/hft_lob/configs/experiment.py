@@ -138,6 +138,8 @@ class TrainingConfig:
     loss_huber_delta: float = 1.0
     epochs: int = 50
     patience: int = 10
+    monitor_metric: str = "val/ts_ic"
+    monitor_mode: str = "max"
     learning_rate: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 1e-5

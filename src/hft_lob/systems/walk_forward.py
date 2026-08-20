@@ -41,5 +41,7 @@ def run_walk_forward(
     statistical baseline 由 BaselineRunner 执行；MLP 与主模型均经
     LOBLightningModule 执行。所有 candidate 生成同一 PredictionArtifact parquet，
     再由 build_evaluation_report 评估。禁止跨 fold 复用 normalizer/checkpoint。
+    checkpoint 和 early stopping 必须使用 ``config.training.monitor_metric`` 与
+    ``config.training.monitor_mode``，不允许 runner 自行定义另一套指标名。
     """
     raise NotImplementedError("run_walk_forward not implemented")
