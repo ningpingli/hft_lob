@@ -9,8 +9,8 @@ def load_config(config_path: str, *, experiment_id: str) -> ExperimentConfig:
     """读取 YAML 配置并组装 ExperimentConfig（缺段/缺键用默认值兜底）。
 
     YAML 结构按 §42 冻结规格：task / data / target / sessions / window /
-    features / normalization / loader / model / training / evaluation / split /
-    seed（完整模板见 ``configs/experiment.yaml``）。
+    cleaning / features / normalization / loader / model / baselines / training /
+    evaluation / split / seed（完整模板见 ``configs/experiment.yaml``）。
 
     Args:
         config_path: configs/experiment.yaml 路径。

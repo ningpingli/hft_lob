@@ -14,41 +14,46 @@ from hft_lob.preprocessing.manifest import (
     write_manifest,
 )
 from hft_lob.preprocessing.normalize import (
-    CausalRollingNormalizer,
     TensorNormalizer,
     TrainOnlyNormalizer,
+    fit_train_only_normalizer,
 )
-from hft_lob.preprocessing.pipeline import PipelineResult, run_pipeline
+from hft_lob.preprocessing.pipeline import (
+    PreparedDataset,
+    prepare_dataset,
+)
 from hft_lob.preprocessing.quality import QualityReport, run_quality_checks
 from hft_lob.preprocessing.split import (
     ChronologicalSplit,
     Fold,
+    WalkForwardPlan,
     chronological_split,
     walk_forward_folds,
 )
 
 __all__ = [
-    "CausalRollingNormalizer",
     "CleanDayResult",
     "ChronologicalSplit",
     "DataCleaner",
     "FeatureTransformer",
     "Fold",
     "LabelTransformer",
-    "PipelineResult",
+    "PreparedDataset",
     "QualityReport",
     "SessionSegment",
     "TensorNormalizer",
     "TrainOnlyNormalizer",
+    "WalkForwardPlan",
     "build_manifest",
     "chronological_split",
     "dataset_version",
     "feature_version",
+    "fit_train_only_normalizer",
     "label_column",
     "label_version",
+    "prepare_dataset",
     "read_manifest",
     "raw_file_hash",
-    "run_pipeline",
     "run_quality_checks",
     "stable_config_hash",
     "walk_forward_folds",

@@ -15,13 +15,20 @@ LOB（Limit Order Book）深度学习预测 / HLOB 框架的接口骨架仓库�
 
 ```
 src/hft_lob/
-├── configs/                  # 实验配置（YAML 由后续阶段填入）
-├── data_processing/          # 数据处理流水线
-├── loaders/                  # torch 数据集与 DataLoader
-├── models/                   # 模型库（CNN / Transformer / TABL / AxialLOB）
-├── optimizers/               # 训练 executor / lightning module / losses
-├── simulator/                # 回测 / 撮合 / 交易 agent
-└── loggers/                  # 实验日志
+├── configs/                  # 强类型实验配置
+├── preprocessing/            # session 清洗、特征、标签、manifest、split、normalizer
+├── datasets/                 # LOBWindowDataset / LOBBatch
+├── models/                   # 纯 nn.Module 模型
+├── baselines/                # Zero / Imbalance / Ridge 及运行适配器
+├── systems/                  # DataModule、Lightning wrapper、artifact、评估、walk-forward
+└── utils/                    # 配置加载、实验、日志、检查点、随机种子
+```
+
+统一接口闭环：
+
+```text
+PreparedDataset → WalkForwardPlan → fold normalizer → LOBBatch
+→ model/baseline → PredictionArtifact → EvaluationReport → FoldResult
 ```
 
 ## 开发

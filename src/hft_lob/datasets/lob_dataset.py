@@ -32,6 +32,18 @@ class SampleMeta:
     anchor_timestamp: str
     mid_t: float
     future_mid: float
+    bid1: float
+    ask1: float
+    spread: float
+
+
+@dataclass(frozen=True)
+class LOBBatch:
+    """训练、预测和 artifact 共用的唯一 batch 契约。"""
+
+    features: torch.Tensor  # [B, 1, T, F]
+    targets: torch.Tensor  # [B, 1]
+    metadata: tuple[SampleMeta, ...]
 
 
 class LOBWindowDataset(Dataset):
@@ -90,13 +102,12 @@ class LOBWindowDataset(Dataset):
         """全部有效样本数。"""
         raise NotImplementedError("LOBWindowDataset.__len__ not implemented")
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, dict[str, object]]:
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, SampleMeta]:
         """返回 (特征窗口, 回归标签, 样本元数据)。
 
         Returns:
             - 特征窗口：``(1, window_size, n_features)`` float32，含 anchor 帧；
-            - 标签：标量 float32（anchor 行的主标签）；
-            - 元数据：``{ticker, trade_date, session_id, anchor_timestamp,
-              mid_t, future_mid, bid1, ask1}``（§13/§28，研究 artifact 定位用）。
+            - 标签：``(1,)`` float32，collate 后严格为 ``[B, 1]``；
+            - 元数据：完整 ``SampleMeta``（§13/§28）。
         """
         raise NotImplementedError("LOBWindowDataset.__getitem__ not implemented")

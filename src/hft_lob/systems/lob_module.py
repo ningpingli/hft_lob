@@ -7,6 +7,8 @@ import torch
 from torch import nn
 
 from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.datasets.lob_dataset import LOBBatch
+from hft_lob.systems.artifact import PredictionArtifact
 
 
 class LOBLightningModule(L.LightningModule):
@@ -48,15 +50,15 @@ class LOBLightningModule(L.LightningModule):
         """前向：委托内部模型（§18 契约）。"""
         raise NotImplementedError("LOBLightningModule.forward not implemented")
 
-    def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """训练步：回归损失（§20）。"""
         raise NotImplementedError("LOBLightningModule.training_step not implemented")
 
-    def validation_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
+    def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """验证步：累积 preds/targets（epoch 端统一计算指标）。"""
         raise NotImplementedError("LOBLightningModule.validation_step not implemented")
 
-    def test_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
+    def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """测试步：累积 preds/targets/meta（供 artifact 与日级指标，§28）。"""
         raise NotImplementedError("LOBLightningModule.test_step not implemented")
 
@@ -65,8 +67,12 @@ class LOBLightningModule(L.LightningModule):
         raise NotImplementedError("LOBLightningModule.on_validation_epoch_end not implemented")
 
     def on_test_epoch_end(self) -> None:
-        """测试期结束：test 指标 + 日级稳定性 + prediction artifact（§21/§28）。"""
+        """测试期结束：只汇集预测记录；评估与落盘由外部统一处理。"""
         raise NotImplementedError("LOBLightningModule.on_test_epoch_end not implemented")
+
+    def predict_step(self, batch: LOBBatch, batch_idx: int) -> PredictionArtifact:
+        """生成带完整 metadata 的 batch 级预测产物。"""
+        raise NotImplementedError("LOBLightningModule.predict_step not implemented")
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """AdamW（参数来自 training 段；无 scheduler）。"""

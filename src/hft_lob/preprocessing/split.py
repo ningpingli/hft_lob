@@ -34,6 +34,14 @@ class Fold:
     test_dates: list[str]
 
 
+@dataclass(frozen=True)
+class WalkForwardPlan:
+    """绑定数据版本的完整 walk-forward 执行计划。"""
+
+    dataset_version: str
+    folds: tuple[Fold, ...]
+
+
 def chronological_split(dates: list[str], config: SplitConfig) -> ChronologicalSplit:
     """按完整交易日 chronological 切分（§15）。
 

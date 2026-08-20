@@ -7,41 +7,19 @@ from __future__ import annotations
 from typing import Any
 
 import lightning as L
-import torch
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.loggers import Logger
 
+from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.lob_data_module import LOBDataModule
+from hft_lob.systems.metrics import EvaluationReport
 
 # ============================================================
 # 从 utils 导入（消除重复定义）
 # ============================================================
 
 # ============================================================
-# 1. 数据模块工厂接口（保留）
-# ============================================================
-
-def build_datamodule(
-    general: dict[str, Any],
-    data_cfg: dict[str, Any],
-    loader_cfg: dict[str, Any],
-) -> LOBDataModule:
-    """
-    根据配置构建 DataModule（数据层）。
-
-    Args:
-        general: 通用配置。
-        data_cfg: 数据配置。
-        loader_cfg: 加载器配置。
-
-    Returns:
-        实例化的 LOBDataModule。
-    """
-    raise NotImplementedError("train.build_datamodule not implemented")
-
-
-# ============================================================
-# 2. 回调工厂接口（保留，或移入 callbacks/ 模块）
+# 1. 回调工厂接口
 # ============================================================
 
 def build_checkpoint_callback(
@@ -91,7 +69,7 @@ def build_early_stopping_callback(
 
 
 # ============================================================
-# 3. 训练器构建接口（保留，编排层核心）
+# 2. 训练器构建接口
 # ============================================================
 
 def build_trainer(
@@ -128,7 +106,7 @@ def build_trainer(
 
 
 # ============================================================
-# 4. 执行接口（保留，编排层核心）
+# 3. 单 fold 执行接口
 # ============================================================
 
 def run_training(
@@ -154,7 +132,7 @@ def run_test(
     lightning_module: L.LightningModule,
     datamodule: LOBDataModule,
     ckpt_path: str,
-) -> list[dict[str, float]]:
+) -> EvaluationReport:
     """
     执行测试流程（加载最佳检查点后评估）。
 
@@ -165,7 +143,7 @@ def run_test(
         ckpt_path: 最佳检查点路径。
 
     Returns:
-        测试结果列表。
+        统一结构化评估报告。
     """
     raise NotImplementedError("train.run_test not implemented")
 
@@ -175,8 +153,8 @@ def run_predict(
     lightning_module: L.LightningModule,
     datamodule: LOBDataModule,
     ckpt_path: str,
-    output_path: str = "predictions.pt",
-) -> list[torch.Tensor]:
+    split: str = "test",
+) -> PredictionArtifact:
     """
     执行预测流程（加载检查点后推理）。
 
@@ -185,9 +163,9 @@ def run_predict(
         lightning_module: 预测模块。
         datamodule: 数据模块。
         ckpt_path: 检查点路径。
-        output_path: 预测结果保存路径。
+        split: 当前预测所属 split。
 
     Returns:
-        预测结果列表。
+        含完整 metadata/model/dataset/fold 的统一预测产物。
     """
     raise NotImplementedError("train.run_predict not implemented")

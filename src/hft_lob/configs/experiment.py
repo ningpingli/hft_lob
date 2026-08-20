@@ -49,6 +49,13 @@ class DataConfig:
 
 
 @dataclass(frozen=True)
+class CleaningConfig:
+    """清洗参数的唯一来源。"""
+
+    max_ffill_gap_seconds: int = 6
+
+
+@dataclass(frozen=True)
 class TargetConfig:
     """标签定义（§7）：60 秒中间价对数收益，future 匹配容差 3 秒（§7.2）。"""
 
@@ -73,12 +80,6 @@ class WindowConfig:
     history_snapshots: int = 180
     include_anchor_snapshot: bool = True
 
-    @property
-    def history_seconds(self) -> int:
-        """窗口覆盖的墙钟秒数（快照数 × 3 秒周期）。"""
-        return self.history_snapshots * 3
-
-
 @dataclass(frozen=True)
 class FeatureConfig:
     """特征（§10/§11）：第一版保留原始 23 维；派生特征 P1 默认关闭。"""
@@ -95,8 +96,7 @@ class FeatureConfig:
 class NormalizationConfig:
     """归一化（§12）：只允许 t 之前（或 train 段）信息；禁止全量统计。"""
 
-    mode: str = "train_only"  # train_only | causal
-    max_ffill_gap_seconds: int = 6  # §5 缺失策略：gap 上限，超过则标记该段 invalid
+    mode: str = "train_only"  # MVP 唯一允许值
 
 
 @dataclass(frozen=True)
@@ -105,7 +105,6 @@ class LoaderConfig:
 
     batch_size: int = 128
     num_workers: int = 0
-    seed: int = 42
     pin_memory: bool = False
     persistent_workers: bool = False
     prefetch_factor: int | None = None  # None = PyTorch 默认
@@ -118,17 +117,17 @@ class ModelConfig:
 
     name: str = "cnn1"
     output_dim: int = 1
-    num_features: int | None = None  # None → 由特征工程产出列数决定（契约校验用）
+    hidden_dim: int = 64  # MLP 使用
+    dropout: float = 0.1  # MLP 使用
 
 
 @dataclass(frozen=True)
 class BaselineConfig:
     """MVP 基线（§17）：Zero / Imbalance / Ridge / 轻量 MLP。"""
 
-    names: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
+    statistical_names: tuple[str, ...] = ("zero", "imbalance", "ridge")
+    neural_names: tuple[str, ...] = ("mlp",)
     ridge_alpha: float = 1.0
-    mlp_hidden_dim: int = 64
-    mlp_dropout: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -143,7 +142,6 @@ class TrainingConfig:
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 1e-5
     log_interval_epochs: int = 1
-    seed: int = 42
 
 
 @dataclass(frozen=True)
@@ -181,6 +179,7 @@ class ExperimentConfig:
     experiment_id: str
     task: TaskConfig
     data: DataConfig
+    cleaning: CleaningConfig
     target: TargetConfig
     sessions: SessionConfig
     window: WindowConfig
@@ -205,12 +204,9 @@ class ExperimentConfig:
         return self.model.name
 
     @property
-    def feature_count(self) -> int:
-        """模型输入特征数：23 原始；开启派生特征后追加（§10/§11）。"""
-        n = len(RAW_FEATURE_COLUMNS)
-        if self.features.use_derived:
-            n += len(self.features.derived_features)
-        return n
+    def nominal_history_seconds(self) -> int:
+        """名义窗口时长，由快照数和配置采样周期共同推导。"""
+        return self.window.history_snapshots * self.data.snapshot_interval_seconds
 
     @property
     def target_column(self) -> str:

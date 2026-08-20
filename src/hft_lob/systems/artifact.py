@@ -7,7 +7,25 @@ split / model_version / dataset_version，否则无法定位异常预测。
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
+
+from hft_lob.datasets.lob_dataset import SampleMeta
+
+
+@dataclass(frozen=True)
+class PredictionArtifact:
+    """模型和 baseline 共用的内存预测产物。"""
+
+    predictions: np.ndarray
+    targets: np.ndarray
+    metadata: tuple[SampleMeta, ...]
+    model_name: str
+    model_version: str
+    dataset_version: str
+    fold_index: int
+    split: str
 
 
 def git_commit() -> str:
@@ -17,24 +35,14 @@ def git_commit() -> str:
 
 def save_prediction_artifact(
     *,
-    preds: np.ndarray,
-    targets: np.ndarray,
-    meta: dict[str, list[object]],
+    artifact: PredictionArtifact,
     path: str,
-    model_version: str,
-    dataset_version: str,
-    split: str = "test",
 ) -> str:
     """保存预测结果 parquet（§28 字段清单）。
 
     Args:
-        preds: 预测值（与 meta 等长）。
-        targets: 已实现收益。
-        meta: 每样本元数据（来自 LOBWindowDataset 的 meta dict-of-lists）。
+        artifact: 完整、强类型、已绑定 model/dataset/fold/split 的预测产物。
         path: 输出 parquet 路径。
-        model_version: 模型版本（§29）。
-        dataset_version: 数据集版本（§29/§31）。
-        split: 所属切分段（test）。
 
     Returns:
         输出路径。

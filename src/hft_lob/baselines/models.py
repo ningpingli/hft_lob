@@ -61,25 +61,3 @@ class RidgeBaseline(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """返回 ``[B, 1]`` Ridge 预测。"""
         raise NotImplementedError("RidgeBaseline.forward not implemented")
-
-
-class MLPBaseline(nn.Module):
-    """Baseline 3：展平历史窗口后的轻量 MLP 回归模型。"""
-
-    def __init__(
-        self,
-        *,
-        num_features: int,
-        history_snapshots: int,
-        hidden_dim: int = 64,
-        dropout: float = 0.1,
-    ) -> None:
-        raise NotImplementedError("MLPBaseline.__init__ not implemented")
-
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:
-        """显式训练入口；训练数据必须来自 training split。"""
-        raise NotImplementedError("MLPBaseline.fit not implemented")
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """返回 ``[B, 1]`` MLP 预测。"""
-        raise NotImplementedError("MLPBaseline.forward not implemented")

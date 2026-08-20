@@ -9,10 +9,10 @@ import torch
 
 @runtime_checkable
 class BaselineModel(Protocol):
-    """可训练/推理 baseline 的最小公共协议。
+    """非梯度 baseline 的最小公共协议。
 
-    所有 baseline 接收与神经网络相同的 ``[B, 1, T, F]`` 输入，并输出
-    ``[B, 1]``。无需拟合的 baseline 也实现 ``fit``，直接返回自身。
+    Zero/Imbalance/Ridge 接收与神经网络相同的输入输出。MLP 属神经模型，走
+    ``LOBLightningModule``，不属于本协议。
     """
 
     def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:

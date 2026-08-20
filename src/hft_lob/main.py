@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 VALID_STAGES: tuple[str, ...] = (
-    "data_processing", "dataset_preparation", "training", "evaluation",
+    "prepare-data", "walk-forward", "evaluate", "predict-offline",
 )
 
 
@@ -25,25 +25,15 @@ def main() -> None:
     训练流程主入口。
 
     完整流程：
-    1. 加载配置（load_experiment_config）
+    1. 加载配置（load_config）
     2. 解析实验 ID（resolve_experiment_id）
     3. 解析日志目录（resolve_log_dir）
     4. 备份配置（backup_experiment_config）
     5. 构建日志器（build_logger）
-    6. 构建数据模块（build_datamodule）
-    7. 构建模型（build_model）
-    8. 构建回调（build_checkpoint_callback, build_early_stopping_callback）
-    9. 构建 Trainer（build_trainer）
-    10. 执行训练（run_training）
-    11. 执行测试（run_test）或 预测（run_predict）
-
-    Args:
-        config_path: 实验配置文件路径。
-        model_name: 若指定，覆盖配置文件中的 model 字段。
-        resume_ckpt: 恢复训练的检查点路径。
-        skip_test: 是否跳过测试阶段。
-        offline_log: 是否强制使用 offline 日志模式。
-        override_exp_id: 覆盖自动生成的实验 ID。
+    6. prepare_dataset 生成固定版本和 WalkForwardPlan
+    7. run_walk_forward 对每个 fold 独立拟合 normalizer 并运行模型/baseline
+    8. 所有 candidate 输出 PredictionArtifact
+    9. build_evaluation_report 输出 EvaluationReport/FoldResult
     """
     raise NotImplementedError("train.main not implemented")
 

@@ -1,6 +1,6 @@
 """纯模型层：统一 ``forward(x) -> [B, 1]`` 契约（需求文档 §18）。
 
-MVP 实际可用：``cnn1`` / ``deeplob``（§1.1/§17/§39）。其余 9 个模型（transformer
+MVP 接口：``cnn1`` / ``deeplob`` / ``mlp``（§1.1/§17/§39）。其余模型（transformer
 / itransformer / lobtransformer / cnn2 / axiallob / dla / binbtabl / binctabl /
 hlob）**接口保留、暂不实现**（构造/前向为 ``raise NotImplementedError`` 骨架，
 待 §39 Phase 3-4 分阶段实装）。所有模型均为纯 ``torch.nn.Module``，训练职责由
@@ -10,6 +10,7 @@ hlob）**接口保留、暂不实现**（构造/前向为 ``raise NotImplemented
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from torch import nn
@@ -23,6 +24,7 @@ from hft_lob.models.DeepLob.deeplob import DeepLOB
 from hft_lob.models.DLA.DLA import DLA
 from hft_lob.models.iTransformer.itransformer import ITransformer
 from hft_lob.models.LobTransformer.lobtransformer import LobTransformer
+from hft_lob.models.MLP.mlp import MLP
 from hft_lob.models.TABL.bin_nn import BiN
 from hft_lob.models.TABL.bin_tabl import BiN_BTABL, BiN_CTABL
 from hft_lob.models.TABL.bl_layer import BL_layer
@@ -33,12 +35,14 @@ from hft_lob.models.Transformer.transformer import SinusoidalPositionalEmbedding
 def build_model(
     config: ExperimentConfig,
     *,
+    feature_columns: Sequence[str],
     homological_structures: dict[str, Any] | None = None,
 ) -> nn.Module:
     """按配置实例化模型（§18：统一 forward(x) -> [B, 1]）。
 
     Args:
         config: 实验配置根（model 段 + window/features 契约）。
+        feature_columns: PreparedDataset 产出的唯一特征 schema。
         homological_structures: hlob 模型所需的同调结构（仅 ``hlob`` 使用；
             由调用方提供，缺失抛 ValueError）。
 
@@ -50,7 +54,7 @@ def build_model(
         NotImplementedError: 目标模型接口尚未实现（非 MVP 模型骨架）。
     """
     name = config.model.name
-    num_features = config.model.num_features or config.feature_count
+    num_features = len(feature_columns)
     history = config.window.history_snapshots
     levels = config.data.levels
 
@@ -58,6 +62,13 @@ def build_model(
         return CNN1(num_features=num_features, history_length=history)
     if name == "deeplob":
         return DeepLOB(num_features=num_features, levels=levels)
+    if name == "mlp":
+        return MLP(
+            num_features=num_features,
+            history_snapshots=history,
+            hidden_dim=config.model.hidden_dim,
+            dropout=config.model.dropout,
+        )
     # ---- 以下接口保留、暂不实现（§39 Phase 3-4）----
     if name == "transformer":
         return Transformer(num_features=num_features, history_length=history)
@@ -87,7 +98,7 @@ def build_model(
             )
         return Complete_HCNN(homological_structures=homological_structures, num_features=num_features)
     raise ValueError(
-        f"Unsupported model {name!r}; registered: cnn1 | deeplob | transformer | "
+        f"Unsupported model {name!r}; registered: cnn1 | deeplob | mlp | transformer | "
         "itransformer | lobtransformer | cnn2 | axiallob | dla | binbtabl | "
         "binctabl | hlob"
     )
@@ -107,6 +118,7 @@ __all__ = [
     "GatedAxialAttention",
     "ITransformer",
     "LobTransformer",
+    "MLP",
     "SinusoidalPositionalEmbedding",
     "TABL_layer",
     "Transformer",

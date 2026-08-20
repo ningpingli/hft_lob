@@ -6,8 +6,8 @@ from __future__ import annotations
 def set_seed(seed: int) -> None:
     """设置全局随机种子（§29 可复现：Python/NumPy/PyTorch/CUDA + cuDNN 确定性）。
 
-    DataLoader 侧的确定性由 ``systems.lob_data_module._seed_worker``（worker
-    种子）与 ``loader.seed`` 播种的 generator（shuffle 顺序）共同保证。
+    DataLoader 侧由根 seed 派生 worker 和 shuffle seed，bootstrap 等其他随机流
+    也必须从同一根 seed 按稳定命名空间派生。
 
     Args:
         seed: 全局种子。
