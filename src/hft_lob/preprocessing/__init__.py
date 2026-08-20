@@ -13,7 +13,11 @@ from hft_lob.preprocessing.manifest import (
     stable_config_hash,
     write_manifest,
 )
-from hft_lob.preprocessing.normalize import CausalRollingNormalizer, TrainOnlyNormalizer
+from hft_lob.preprocessing.normalize import (
+    CausalRollingNormalizer,
+    TensorNormalizer,
+    TrainOnlyNormalizer,
+)
 from hft_lob.preprocessing.pipeline import PipelineResult, run_pipeline
 from hft_lob.preprocessing.quality import QualityReport, run_quality_checks
 from hft_lob.preprocessing.split import (
@@ -34,6 +38,7 @@ __all__ = [
     "PipelineResult",
     "QualityReport",
     "SessionSegment",
+    "TensorNormalizer",
     "TrainOnlyNormalizer",
     "build_manifest",
     "chronological_split",

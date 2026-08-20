@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import torch
 from torch.utils.data import Dataset
 
+from hft_lob.preprocessing.normalize import TensorNormalizer
+
 #: 构造样本所需的处理列（元数据侧）。
 _META_COLUMNS: tuple[str, ...] = (
     "trade_date", "session_id", "seconds", "mid_price", "future_mid",
@@ -55,8 +57,7 @@ class LOBWindowDataset(Dataset):
         feature_cols: Sequence[str],
         target_col: str,
         cache_size: int = 4,
-        feature_mean: torch.Tensor | None = None,
-        feature_std: torch.Tensor | None = None,
+        normalizer: TensorNormalizer | None = None,
     ) -> None:
         """初始化数据集：逐文件逐 session 扫描有效样本并建立索引。
 
@@ -67,8 +68,8 @@ class LOBWindowDataset(Dataset):
             feature_cols: 模型输入特征列（23 原始，或 +派生）。
             target_col: 主标签列名（§7.1）。
             cache_size: 文件内存缓存上限（按文件数计，FIFO 逐出）。
-            feature_mean / feature_std: train-only 归一化参数（逐特征列，
-                torch.Tensor）；None 表示不归一化。
+            normalizer: 仅从 training split 拟合并冻结的归一化器；Dataset 是
+                唯一调用 ``transform_tensor`` 的位置，None 表示不归一化。
 
         Raises:
             ValueError: 参数非法，或任一文件包含多个 trade_date/session_id。

@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import ExperimentConfig
 from hft_lob.datasets.lob_dataset import LOBWindowDataset
+from hft_lob.preprocessing.normalize import TensorNormalizer
 
 
 @dataclass(frozen=True)
@@ -67,8 +68,9 @@ class LOBDataModule(pl.LightningDataModule):
       构建三段数据集并 ``torch.save``（幂等），无则 no-op；
     - ``setup(stage)``：每进程执行，赋值 ``self.{train,val,test,predict}_dataset``；
       回归语义下 predict 与 test 共用同一数据集（推理 = 测试窗口数据，§33）；
-    - 归一化：``train_only`` 模式在 ``setup`` 内 fit(train) → transform(all)
-      （§12，参数只来自训练段）；``causal`` 模式暂不在此做行级归一化
+    - 归一化：``train_only`` 模式在 ``setup`` 内仅 fit(train)，随后把同一个冻结
+      normalizer 注入所有 Dataset，由 Dataset 取样时应用一次（§12）；不改写
+      DataFrame/parquet，杜绝双重归一化。``causal`` 模式暂不在此做行级归一化
       （``CausalRollingNormalizer`` 已在 preprocessing 层提供，待接入）；
     - 确定性：train shuffle 使用 ``loader.seed`` 播种的 generator，
       ``_seed_worker`` 逐 worker 重播种（§29）。
@@ -99,6 +101,7 @@ class LOBDataModule(pl.LightningDataModule):
         self.val_dataset: LOBWindowDataset | None = None
         self.test_dataset: LOBWindowDataset | None = None
         self.predict_dataset: LOBWindowDataset | None = None
+        self.normalizer: TensorNormalizer | None = None
 
     @property
     def dataset_version(self) -> str | None:
@@ -148,10 +151,9 @@ class LOBDataModule(pl.LightningDataModule):
         self,
         files: Sequence[str],
         *,
-        feature_mean: torch.Tensor | None = None,
-        feature_std: torch.Tensor | None = None,
+        normalizer: TensorNormalizer | None = None,
     ) -> LOBWindowDataset:
-        """从 ``config`` 构造单阶段 ``LOBWindowDataset``（含 train-only 归一化参数）。"""
+        """构造 Dataset；所有 split 共享仅由 training split 拟合的 normalizer。"""
         raise NotImplementedError("LOBDataModule._make_dataset not implemented")
 
     def _make_loader(self, dataset: LOBWindowDataset, *, shuffle: bool) -> DataLoader:
