@@ -10,7 +10,6 @@ requires-python = ">=3.12"
 dependencies = [
     "torch>=2.0",
     "lightning>=2.0",
-    "wandb>=0.15",
     "polars>=0.19",
     "pyarrow>=14.0",  # required by polars.to_pandas() used in CustomDataset
     "torchmetrics>=1.0",
@@ -24,6 +23,7 @@ dependencies = [
     "tqdm",
     "pyyaml",
     "fast_tmfg",
+    "tensorboard>=2.21.0",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +52,7 @@ select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
 
 # mypy config: see hermes-dsh-collab spec — business code strict; external
-# library boundaries (torch / lightning / wandb / polars) may use `Any` via
+# library boundaries (torch / lightning / polars) may use `Any` via
 # explicit `type: ignore[import-untyped]` or per-module overrides.
 [tool.mypy]
 python_version = "3.12"

@@ -1,32 +1,72 @@
-"""日志器构建：wandb 尽力而为降级（online → offline → TensorBoard → None）。"""
+"""日志器构建：TensorBoard 本地实验记录。"""
 
 from __future__ import annotations
 
+import warnings
+from pathlib import Path
 from typing import Any
 
 from lightning.pytorch.loggers import Logger
-
-#: wandb 项目名（§29 实验跟踪；失败不影响本地 metrics）。
-_WANDB_PROJECT = "hft_lob"
 
 
 def build_logger(
     experiment_id: str,
     log_dir: str,
-    project_name: str = _WANDB_PROJECT,
     hyperparams: dict[str, Any] | None = None,
-    offline_mode: bool = False,
 ) -> Logger | None:
-    """构建日志器：优先 wandb（online→offline），失败降级 TensorBoard，再失败 None。
+    """构建 TensorBoard 日志器，后端不可用时返回 None。
 
     Args:
         experiment_id: 实验 ID（作为 run name / 本地目录名）。
         log_dir: 本地日志保存路径。
-        project_name: wandb 项目名。
         hyperparams: 需记录的扁平超参（best-effort）。
-        offline_mode: 强制 wandb offline 模式。
 
     Returns:
-        日志器实例或 None（全部失败时）。
+        TensorBoardLogger 实例，或后端初始化失败时的 None。
     """
-    raise NotImplementedError("build_logger not implemented")
+    for field, value in (
+        ("experiment_id", experiment_id),
+        ("log_dir", log_dir),
+    ):
+        if not value.strip():
+            raise ValueError(f"{field} must not be empty")
+
+    Path(log_dir).expanduser().mkdir(parents=True, exist_ok=True)
+    try:
+        logger = _build_tensorboard_logger(
+            experiment_id=experiment_id,
+            log_dir=log_dir,
+        )
+    except Exception as exc:
+        _warn_backend_failure("TensorBoard", exc)
+        return None
+    _log_hyperparams_best_effort(logger, hyperparams)
+    return logger
+
+
+def _build_tensorboard_logger(*, experiment_id: str, log_dir: str) -> Logger:
+    """延迟加载 TensorBoard 兜底后端。"""
+    from lightning.pytorch.loggers import TensorBoardLogger
+
+    return TensorBoardLogger(
+        save_dir=str(Path(log_dir).expanduser()),
+        name=experiment_id,
+        version="",
+    )
+
+
+def _log_hyperparams_best_effort(logger: Logger, hyperparams: dict[str, Any] | None) -> None:
+    if hyperparams is None:
+        return
+    try:
+        logger.log_hyperparams(hyperparams)
+    except Exception as exc:
+        _warn_backend_failure("hyperparameter logging", exc)
+
+
+def _warn_backend_failure(backend: str, error: Exception) -> None:
+    warnings.warn(
+        f"{backend} unavailable; continuing with fallback: {type(error).__name__}: {error}",
+        RuntimeWarning,
+        stacklevel=3,
+    )
