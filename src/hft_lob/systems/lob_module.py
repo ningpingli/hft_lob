@@ -49,7 +49,16 @@ class LOBLightningModule(L.LightningModule):
             prediction_split: ``predict_step`` 生成 artifact 所属 split。
         """
         super().__init__()
-        self.save_hyperparameters(ignore=["model"])
+        # 不把 ExperimentConfig dataclass pickle 进 checkpoint；PyTorch 2.6 的
+        # weights_only 安全加载只接受张量和基础类型。配置已由实验目录单独备份。
+        self.save_hyperparameters(
+            {
+                "dataset_version": dataset_version,
+                "model_version": model_version,
+                "fold_index": fold_index,
+                "prediction_split": prediction_split,
+            }
+        )
         self.model = model
         self.config = config
         self.dataset_version = dataset_version
@@ -79,6 +88,19 @@ class LOBLightningModule(L.LightningModule):
                 f"model output must have shape [B,1], got {tuple(predictions.shape)}"
             )
         return predictions
+
+    def transfer_batch_to_device(
+        self,
+        batch: LOBBatch,
+        device: torch.device,
+        dataloader_idx: int,
+    ) -> LOBBatch:
+        """迁移 frozen LOBBatch 中的张量，metadata 保持在 CPU/Python 侧。"""
+        return LOBBatch(
+            features=batch.features.to(device, non_blocking=True),
+            targets=batch.targets.to(device, non_blocking=True),
+            metadata=batch.metadata,
+        )
 
     def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         """训练步：回归损失（§20）。"""

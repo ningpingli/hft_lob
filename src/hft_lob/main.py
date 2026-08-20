@@ -11,6 +11,8 @@ from pathlib import Path
 
 from hft_lob.configs import load_config
 from hft_lob.preprocessing import prepare_dataset
+from hft_lob.systems.executor import DefaultWalkForwardExecutor
+from hft_lob.systems.walk_forward import run_walk_forward
 from hft_lob.utils.checkpoint_utils import backup_experiment_config
 from hft_lob.utils.experiment_manager import (
     resolve_experiment_id,
@@ -114,8 +116,27 @@ def main() -> None:
             print(f"quality_report_path={prepared.quality_report_path}")
             print(f"fold_count={fold_count}")
             continue
+        if stage == "walk-forward":
+            if prepared is None:
+                prepared = prepare_dataset(config)
+            report = run_walk_forward(
+                prepared,
+                config,
+                executor=DefaultWalkForwardExecutor(str(log_dir / "walk_forward")),
+            )
+            write_experiment_log(
+                experiment_id,
+                "walk_forward",
+                {
+                    "dataset_version": report.dataset_version,
+                    "result_count": len(report.fold_results),
+                    "summary": report.summary,
+                },
+            )
+            print(f"walk_forward_results={len(report.fold_results)}")
+            continue
         raise NotImplementedError(
-            f"stage {stage!r} is not executable yet; complete the walk-forward executor first"
+            f"stage {stage!r} is not executable yet"
         )
 
 if __name__ == "__main__":
