@@ -28,6 +28,7 @@ from hft_lob.configs.experiment import (
     TargetConfig,
     TaskConfig,
     TrainingConfig,
+    WalkForwardConfig,
     WindowConfig,
 )
 from hft_lob.models import build_model
@@ -70,13 +71,14 @@ def _make_config(model_name: str) -> ExperimentConfig:
         training=TrainingConfig(),
         evaluation=EvaluationConfig(),
         split=SplitConfig(),
+        walk_forward=WalkForwardConfig(),
     )
 
 
 @pytest.fixture(scope="module")
 def sample() -> torch.Tensor:
     torch.manual_seed(0)
-    return torch.randn(2, 1, _HISTORY, _FEATURES)
+    return torch.randn(2, _HISTORY, _FEATURES)
 
 
 @pytest.mark.parametrize("name", _FORWARD_NAMES)
@@ -85,7 +87,9 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
         _make_config(name),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
     )
-    out = model(sample)
+    # CNN1 / DeepLOB 已迁移到统一 [B,T,F]；其余模型将在后续分支迁移。
+    model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
+    out = model(model_input)
     assert out.shape == (2, 1)
 
 
@@ -104,7 +108,7 @@ def test_hlob_constructs_and_forwards_with_minimal_structures(
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         homological_structures=structures,
     )
-    out = model(sample)
+    out = model(sample.unsqueeze(1))
     assert out.shape == (2, 1)
 
 
@@ -157,8 +161,8 @@ def test_contract_injections() -> None:
 @pytest.mark.parametrize(
     ("name", "x"),
     [
-        ("cnn1", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
-        ("deeplob", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
+        ("cnn1", torch.randn(2, _HISTORY, _FEATURES + 4)),
+        ("deeplob", torch.randn(2, _HISTORY, _FEATURES + 4)),
         ("cnn2", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
         ("transformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
         ("lobtransformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),

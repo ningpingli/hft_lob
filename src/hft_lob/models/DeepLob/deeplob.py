@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 from torch import nn
 
@@ -121,14 +123,19 @@ class DeepLOB(nn.Module):
         Raises:
             ValueError: 特征维度与构造契约不一致。
         """
-        # 输入维度契约：conv3 宽度 kernel 必须适配特征轴（5 档数据 = 20 特征，
-        # 10 档数据 = 40 特征）。
+        if x.ndim != 3:
+            raise ValueError(
+                f"DeepLOB expects [B, T, F], got shape {tuple(x.shape)}"
+            )
         if x.shape[-1] != self.num_features:
             raise ValueError(
                 f"DeepLOB expects {self.num_features} features per snapshot, got "
                 f"{x.shape[-1]}. 请核对 ExperimentConfig 的 features 特征列与 "
                 f"data.levels 契约。"
             )
+        # 统一契约不暴露卷积通道维；仅在模型内部转换为 [B, 1, T, F]。
+        x = x.unsqueeze(1)
+
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
@@ -146,4 +153,4 @@ class DeepLOB(nn.Module):
         x = x[:, -1, :]
         logits = self.fc1(x)
 
-        return logits
+        return cast(torch.Tensor, logits)

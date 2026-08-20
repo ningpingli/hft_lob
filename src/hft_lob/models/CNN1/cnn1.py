@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 from torch import nn
 
@@ -81,14 +83,19 @@ class CNN1(nn.Module):
         Raises:
             ValueError: 特征维度与构造契约不一致。
         """
-        # 输入维度契约：conv1 kernel 宽度跨全部 num_features 列，宽度不匹配会
-        # 在运行时崩溃，此处提前报错。
+        if x.ndim != 3:
+            raise ValueError(
+                f"CNN1 expects [B, T, F], got shape {tuple(x.shape)}"
+            )
         if x.shape[-1] != self.num_features:
             raise ValueError(
                 f"CNN1 expects {self.num_features} features per snapshot, got "
                 f"{x.shape[-1]}. 请核对 ExperimentConfig 的 features 特征列与 "
                 f"data.levels 契约。"
             )
+        # 统一契约不暴露卷积通道维；仅在模型内部转换为 [B, 1, T, F]。
+        x = x.unsqueeze(1)
+
         # 卷积 1
         out = self.conv1(x)
         out = self.relu1(out)
@@ -122,4 +129,4 @@ class CNN1(nn.Module):
         # 回归读出头
         out = self.fc2(out)
 
-        return out
+        return cast(torch.Tensor, out)
