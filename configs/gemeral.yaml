@@ -1,0 +1,93 @@
+general:
+  dataset: nasdaq
+  model: deeplob
+  training_stocks:
+  - '688981'
+  target_stocks:
+  - '688981'
+  normalization_window: 1
+  horizons:
+  - 10
+  - 30
+  - 60
+  - 300
+  - 600
+  label_columns:
+    simple_return:
+    - Target_10s_simple
+    - Target_30s_simple
+    - Target_60s_simple
+    - Target_300s_simple
+    - Target_600s_simple
+    log_return:
+    - Target_10s_log
+    - Target_30s_log
+    - Target_60s_log
+    - Target_300s_log
+    - Target_600s_log
+  prediction_label_type: simple_return
+  prediction_label: Target_60s_simple
+  training_ratio: 0.8
+  validation_ratio: 0.1
+  test_ratio: 0.1
+  stages:
+  - data_processing
+  include_target_stock_in_training: true
+  max_days: 400
+data:
+  num_features: 23
+  levels: 5
+  window_size: 50
+  prediction_horizon: 60
+  threshold: 0.0
+  time:
+    source: datetime
+    unit: seconds
+  fields:
+    column_map:
+      a1: ASKp1
+      a1_v: ASKs1
+      b1: BIDp1
+      b1_v: BIDs1
+      a2: ASKp2
+      a2_v: ASKs2
+      b2: BIDp2
+      b2_v: BIDs2
+      a3: ASKp3
+      a3_v: ASKs3
+      b3: BIDp3
+      b3_v: BIDs3
+      a4: ASKp4
+      a4_v: ASKs4
+      b4: BIDp4
+      b4_v: BIDs4
+      a5: ASKp5
+      a5_v: ASKs5
+      b5: BIDp5
+      b5_v: BIDs5
+      last: last
+      volume: volume
+      amount: amount
+loader:
+  batch_size: 128
+  num_workers: 5
+  shuffling_seed: 428
+  balanced_sampling: true
+training:
+  epochs: 30
+  log_interval_epochs: 1
+  learning_rate: 6.0e-05
+  patience: 10
+  loss: mse
+  loss_huber_delta: 1.0
+  optimizer:
+    betas:
+    - 0.9
+    - 0.95
+    weight_decay: 0.1
+trading:
+  initial_cash: 1000
+  trading_fee: 0.0001
+  mid_side_trading: mid_to_mid
+  simulation_type: with_fees
+  probability_threshold: 0.65
