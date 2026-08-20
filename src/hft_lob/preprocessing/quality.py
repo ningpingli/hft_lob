@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from typing import cast
 
 import polars as pl
+
+from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS
+
+_LOB_COLUMNS: tuple[str, ...] = RAW_FEATURE_COLUMNS[:20]
 
 
 @dataclass(frozen=True)
@@ -24,7 +29,7 @@ class QualityReport:
 
     def to_dict(self) -> dict[str, object]:
         """转为字典（供 manifest 落盘）。"""
-        raise NotImplementedError("QualityReport.to_dict not implemented")
+        return asdict(self)
 
 
 def run_quality_checks(df: pl.DataFrame, *, duplicate_count: int) -> QualityReport:
@@ -45,4 +50,88 @@ def run_quality_checks(df: pl.DataFrame, *, duplicate_count: int) -> QualityRepo
     Returns:
         质量报告。
     """
-    raise NotImplementedError("run_quality_checks not implemented")
+    required = {
+        "trade_date",
+        "session_id",
+        "timestamp",
+        "is_ffilled",
+        "snapshot_gap_seconds",
+        *_LOB_COLUMNS,
+    }
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise ValueError(f"quality input missing columns: {missing}")
+    if df.is_empty():
+        raise ValueError("quality input must not be empty")
+
+    trade_dates = df.get_column("trade_date").drop_nulls().unique().to_list()
+    if len(trade_dates) != 1:
+        raise ValueError(f"quality input must contain one trade_date, got {trade_dates}")
+
+    bid1_valid = pl.col("BIDp1").is_not_null() & (pl.col("BIDp1") > 0)
+    ask1_valid = pl.col("ASKp1").is_not_null() & (pl.col("ASKp1") > 0)
+    whole_book_missing = pl.all_horizontal(
+        pl.col(name).is_null() for name in _LOB_COLUMNS
+    )
+    invalid_order = _invalid_level_order_expr()
+
+    aggregate = df.select(
+        whole_book_missing.mean().alias("missing_ratio"),
+        (bid1_valid & ask1_valid & (pl.col("BIDp1") > pl.col("ASKp1")))
+        .sum()
+        .alias("crossed_book_count"),
+        (bid1_valid ^ ask1_valid).sum().alias("one_side_missing_count"),
+        pl.col("is_ffilled").cast(pl.Float64).mean().alias("stale_snapshot_ratio"),
+        invalid_order.sum().alias("invalid_level_order_count"),
+    ).row(0, named=True)
+
+    gaps = (
+        df.get_column("snapshot_gap_seconds")
+        .drop_nulls()
+        .filter(df.get_column("snapshot_gap_seconds").drop_nulls() > 0)
+    )
+    max_value = cast(float | None, gaps.max()) if len(gaps) else None
+    p95_value = (
+        cast(float | None, gaps.quantile(0.95, interpolation="linear"))
+        if len(gaps)
+        else None
+    )
+    max_gap = float(max_value) if max_value is not None else 0.0
+    p95_gap = float(p95_value) if p95_value is not None else 0.0
+
+    return QualityReport(
+        trade_date=str(trade_dates[0]),
+        row_count=df.height,
+        missing_ratio=float(aggregate["missing_ratio"] or 0.0),
+        duplicate_count=duplicate_count,
+        crossed_book_count=int(aggregate["crossed_book_count"] or 0),
+        one_side_missing_count=int(aggregate["one_side_missing_count"] or 0),
+        max_gap=max_gap,
+        p95_gap=p95_gap,
+        stale_snapshot_ratio=float(aggregate["stale_snapshot_ratio"] or 0.0),
+        invalid_level_order_count=int(aggregate["invalid_level_order_count"] or 0),
+    )
+
+
+def _invalid_level_order_expr() -> pl.Expr:
+    comparisons: list[pl.Expr] = []
+    for level in range(1, 5):
+        bid_near = pl.col(f"BIDp{level}")
+        bid_far = pl.col(f"BIDp{level + 1}")
+        ask_near = pl.col(f"ASKp{level}")
+        ask_far = pl.col(f"ASKp{level + 1}")
+        comparisons.extend(
+            [
+                bid_near.is_not_null()
+                & bid_far.is_not_null()
+                & (bid_near > 0)
+                & (bid_far > 0)
+                & (bid_near < bid_far),
+                ask_near.is_not_null()
+                & ask_far.is_not_null()
+                & (ask_near > 0)
+                & (ask_far > 0)
+                & (ask_near > ask_far),
+            ]
+        )
+    return pl.any_horizontal(comparisons)
