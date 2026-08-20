@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 def resolve_ckpt_path(
@@ -20,7 +25,18 @@ def resolve_ckpt_path(
     Returns:
         检查点完整路径；不存在且 ``fallback_to_latest=False`` 时返回 None。
     """
-    raise NotImplementedError("resolve_ckpt_path not implemented")
+    directory = Path(log_dir).expanduser()
+    requested = directory / filename
+    if requested.is_file():
+        return str(requested)
+    if not fallback_to_latest or not directory.is_dir():
+        return None
+
+    checkpoints = [path for path in directory.glob("*.ckpt") if path.is_file()]
+    if not checkpoints:
+        return None
+    latest = max(checkpoints, key=lambda path: (path.stat().st_mtime_ns, path.name))
+    return str(latest)
 
 
 def backup_experiment_config(
@@ -36,4 +52,34 @@ def backup_experiment_config(
     Returns:
         备份文件的完整路径。
     """
-    raise NotImplementedError("backup_experiment_config not implemented")
+    directory = Path(log_dir).expanduser()
+    destination = directory / filename
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            yaml.safe_dump(
+                config,
+                temporary,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+            )
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, destination)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+    return str(destination)
