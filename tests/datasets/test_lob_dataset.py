@@ -58,9 +58,9 @@ def test_dataset_uses_causal_columns_and_anchor_inclusive_window(tmp_path: Path)
     assert len(dataset) == 4
     assert dataset.n_features == 2
     assert dataset.feature_cols == ["normalized__f1", "normalized__f2"]
-    assert features.shape == (1, 2, 2)
+    assert features.shape == (2, 2)
     assert features.dtype == torch.float32
-    torch.testing.assert_close(features, torch.tensor([[[3.0, 0.0], [3.0, 0.0]]]))
+    torch.testing.assert_close(features, torch.tensor([[3.0, 0.0], [3.0, 0.0]]))
     torch.testing.assert_close(target, torch.tensor([0.03]))
     assert metadata.anchor_timestamp == "2026-01-05T09:30:09"
     assert metadata.trade_date == "2026-01-05"

@@ -20,5 +20,5 @@ class BaselineModel(Protocol):
         ...
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """预测未来收益：``[B, 1, T, F] -> [B, 1]``。"""
+        """预测未来收益：``[B, T, F] -> [B, 1]``。"""
         ...

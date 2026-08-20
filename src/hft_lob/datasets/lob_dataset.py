@@ -45,7 +45,7 @@ class SampleMeta:
 class LOBBatch:
     """训练、预测和 artifact 共用的唯一 batch 契约。"""
 
-    features: torch.Tensor  # [B, 1, T, F]
+    features: torch.Tensor  # [B, T, F]，模型自行适配通道维
     targets: torch.Tensor  # [B, 1]
     metadata: tuple[SampleMeta, ...]
 
@@ -159,7 +159,7 @@ class LOBWindowDataset(Dataset):
         """返回 (特征窗口, 回归标签, 样本元数据)。
 
         Returns:
-            - 特征窗口：``(1, window_size, n_features)`` float32，含 anchor 帧；
+            - 特征窗口：``(window_size, n_features)`` float32，含 anchor 帧；
             - 标签：``(1,)`` float32，collate 后严格为 ``[B, 1]``；
             - 元数据：完整 ``SampleMeta``（§13/§28）。
         """
@@ -174,7 +174,7 @@ class LOBWindowDataset(Dataset):
         values = torch.tensor(
             window.select(self._model_feature_cols).to_numpy(),
             dtype=torch.float32,
-        ).unsqueeze(0)
+        )
         target = torch.tensor(
             [float(frame.get_column(self._target_col).item(anchor_index))],
             dtype=torch.float32,

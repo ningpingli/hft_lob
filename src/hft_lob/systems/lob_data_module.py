@@ -9,15 +9,22 @@
 
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+from typing import cast
 
 import lightning.pytorch as pl
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import ExperimentConfig
 from hft_lob.datasets.lob_dataset import LOBBatch, LOBWindowDataset, SampleMeta
+from hft_lob.preprocessing.features import FeatureTransformer
+from hft_lob.preprocessing.manifest import read_manifest
 from hft_lob.preprocessing.normalize import FrameStandardizer
 from hft_lob.preprocessing.pipeline import PreparedDataset
 
@@ -46,20 +53,75 @@ def resolve_stage_files(dataset: PreparedDataset, *, fold_index: int) -> StageFi
         ValueError: fold_index 不在计划内。
         FileNotFoundError: manifest 中引用的 processed 文件不存在。
     """
-    raise NotImplementedError("resolve_stage_files not implemented")
+    if dataset.walk_forward_plan.dataset_version != dataset.dataset_version:
+        raise ValueError("prepared dataset and walk-forward plan versions do not match")
+    fold = next(
+        (item for item in dataset.walk_forward_plan.folds if item.index == fold_index),
+        None,
+    )
+    if fold is None:
+        raise ValueError(f"fold_index {fold_index} is not in the walk-forward plan")
+
+    manifest = read_manifest(dataset.manifest_path)
+    versions = manifest.get_column("dataset_version").unique().to_list()
+    if versions != [dataset.dataset_version]:
+        raise ValueError(
+            "manifest dataset_version does not match the prepared dataset: "
+            f"expected {dataset.dataset_version!r}, got {versions}"
+        )
+
+    def files_for(dates: list[str], *, stage: str) -> list[str]:
+        selected = manifest.filter(manifest["trade_date"].is_in(dates)).sort(
+            "trade_date", "session_id"
+        )
+        present_dates = set(selected.get_column("trade_date").to_list())
+        missing_dates = sorted(set(dates).difference(present_dates))
+        if missing_dates:
+            raise ValueError(f"manifest is missing {stage} dates: {missing_dates}")
+        paths = selected.get_column("processed_file").to_list()
+        missing_files = [path for path in paths if not Path(path).is_file()]
+        if missing_files:
+            raise FileNotFoundError(
+                f"manifest references missing {stage} processed files: {missing_files}"
+            )
+        return paths
+
+    return StageFiles(
+        training_files=files_for(fold.train_dates, stage="training"),
+        validation_files=files_for(fold.validation_dates, stage="validation"),
+        test_files=files_for(fold.test_dates, stage="test"),
+        dataset_version=dataset.dataset_version,
+        fold_index=fold.index,
+    )
 
 
 def _seed_worker(worker_id: int, base_seed: int) -> None:
     """DataLoader worker 确定性种子（§29 全种子；``num_workers > 0`` 时作
     ``worker_init_fn``）。按 ``(base_seed, worker_id)`` 派生独立种子。"""
-    raise NotImplementedError("_seed_worker not implemented")
+    worker_seed = (base_seed + worker_id) % (2**32)
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
+    torch.manual_seed(worker_seed)
 
 
 def _collate(
     batch: list[tuple[torch.Tensor, torch.Tensor, SampleMeta]],
 ) -> LOBBatch:
-    """构造强类型 batch，并校验 features/targets 分别为 [B,1,T,F]/[B,1]。"""
-    raise NotImplementedError("_collate not implemented")
+    """构造强类型 batch，并校验 features/targets 分别为 [B,T,F]/[B,1]。"""
+    if not batch:
+        raise ValueError("cannot collate an empty batch")
+    features, targets, metadata = zip(*batch, strict=True)
+    feature_batch = torch.stack(features)
+    target_batch = torch.stack(targets)
+    if feature_batch.ndim != 3:
+        raise ValueError(
+            f"features must collate to [B, T, F], got {tuple(feature_batch.shape)}"
+        )
+    if target_batch.ndim != 2 or target_batch.shape[1] != 1:
+        raise ValueError(f"targets must collate to [B, 1], got {tuple(target_batch.shape)}")
+    if feature_batch.shape[0] != target_batch.shape[0]:
+        raise ValueError("features and targets must have the same batch size")
+    return LOBBatch(feature_batch, target_batch, tuple(metadata))
 
 
 class LOBDataModule(pl.LightningDataModule):
@@ -92,7 +154,7 @@ class LOBDataModule(pl.LightningDataModule):
         super().__init__()
         self.config = config
         self.stage_files = stage_files
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["standardizer"])
 
         self.train_dataset: LOBWindowDataset | None = None
         self.val_dataset: LOBWindowDataset | None = None
@@ -101,45 +163,67 @@ class LOBDataModule(pl.LightningDataModule):
         self.standardizer = standardizer
 
     @property
-    def dataset_version(self) -> str | None:
+    def dataset_version(self) -> str:
         """当前固定数据集版本标识。"""
-        raise NotImplementedError("LOBDataModule.dataset_version not implemented")
+        return self.stage_files.dataset_version
 
     def prepare_data(self) -> None:
         """processed parquet 已由 prepare-data 生成，因此固定为 no-op。"""
-        raise NotImplementedError("LOBDataModule.prepare_data not implemented")
+        return None
 
-    def setup(self, stage: str) -> None:
+    def setup(self, stage: str | None = None) -> None:
         """按 Lightning 阶段（fit / validate / test / predict）构造或加载数据集。
 
         Args:
             stage: Lightning 阶段标识。
         """
-        raise NotImplementedError("LOBDataModule.setup not implemented")
+        supported = {None, "fit", "validate", "test", "predict"}
+        if stage not in supported:
+            raise ValueError(f"unsupported Lightning stage: {stage!r}")
+        if stage in (None, "fit"):
+            self.train_dataset = self._make_dataset(self.stage_files.training_files)
+            self.val_dataset = self._make_dataset(self.stage_files.validation_files)
+        elif stage == "validate":
+            self.val_dataset = self._make_dataset(self.stage_files.validation_files)
+        if stage in (None, "test"):
+            self.test_dataset = self._make_dataset(self.stage_files.test_files)
+        if stage in (None, "predict"):
+            self.predict_dataset = self._make_dataset(self.stage_files.test_files)
 
     def train_dataloader(self) -> DataLoader:
         """训练 DataLoader：shuffle=True + 根 ``config.seed`` 确定性种子。"""
-        raise NotImplementedError("LOBDataModule.train_dataloader not implemented")
+        return self._make_loader(self._require_dataset("train_dataset"), shuffle=True)
 
     def val_dataloader(self) -> DataLoader:
         """验证 DataLoader：按时间序，shuffle=False。"""
-        raise NotImplementedError("LOBDataModule.val_dataloader not implemented")
+        return self._make_loader(self._require_dataset("val_dataset"), shuffle=False)
 
     def test_dataloader(self) -> DataLoader:
         """测试 DataLoader：按时间序，shuffle=False。"""
-        raise NotImplementedError("LOBDataModule.test_dataloader not implemented")
+        return self._make_loader(self._require_dataset("test_dataset"), shuffle=False)
 
     def predict_dataloader(self) -> DataLoader:
         """预测 DataLoader：按时间序，shuffle=False（与 test 共用数据）。"""
-        raise NotImplementedError("LOBDataModule.predict_dataloader not implemented")
+        return self._make_loader(self._require_dataset("predict_dataset"), shuffle=False)
 
-    def teardown(self, stage: str) -> None:
+    def teardown(self, stage: str | None = None) -> None:
         """释放阶段资源：清空数据集引用，便于 GC。
 
         Args:
             stage: Lightning 阶段标识。
         """
-        raise NotImplementedError("LOBDataModule.teardown not implemented")
+        supported = {None, "fit", "validate", "test", "predict"}
+        if stage not in supported:
+            raise ValueError(f"unsupported Lightning stage: {stage!r}")
+        if stage in (None, "fit"):
+            self.train_dataset = None
+            self.val_dataset = None
+        elif stage == "validate":
+            self.val_dataset = None
+        if stage in (None, "test"):
+            self.test_dataset = None
+        if stage in (None, "predict"):
+            self.predict_dataset = None
 
     # -- 内部装配（实装阶段实现）--------------------------------------------
 
@@ -150,8 +234,50 @@ class LOBDataModule(pl.LightningDataModule):
         standardizer: FrameStandardizer | None = None,
     ) -> LOBWindowDataset:
         """构造 Dataset；所有 split 使用同一套严格因果滚动标准化语义。"""
-        raise NotImplementedError("LOBDataModule._make_dataset not implemented")
+        return LOBWindowDataset(
+            files,
+            ticker=self.config.ticker,
+            window_size=self.config.window.history_snapshots,
+            feature_cols=self.config_feature_columns,
+            target_col=self.config.target_column,
+            cache_size=self.config.loader.cache_size,
+            standardizer=self.standardizer if standardizer is None else standardizer,
+        )
 
     def _make_loader(self, dataset: LOBWindowDataset, *, shuffle: bool) -> DataLoader:
         """从 ``config.loader`` 构造 DataLoader（含确定性种子与工程参数）。"""
-        raise NotImplementedError("LOBDataModule._make_loader not implemented")
+        loader = self.config.loader
+        if loader.batch_size <= 0:
+            raise ValueError("loader.batch_size must be > 0")
+        if loader.num_workers < 0:
+            raise ValueError("loader.num_workers must be >= 0")
+        if loader.persistent_workers and loader.num_workers == 0:
+            raise ValueError("persistent_workers requires num_workers > 0")
+        if loader.prefetch_factor is not None and loader.num_workers == 0:
+            raise ValueError("prefetch_factor requires num_workers > 0")
+
+        generator = torch.Generator()
+        generator.manual_seed(self.config.seed)
+        return DataLoader(
+            dataset,
+            batch_size=loader.batch_size,
+            shuffle=shuffle,
+            num_workers=loader.num_workers,
+            pin_memory=loader.pin_memory,
+            persistent_workers=loader.persistent_workers,
+            prefetch_factor=loader.prefetch_factor,
+            collate_fn=_collate,
+            worker_init_fn=partial(_seed_worker, base_seed=self.config.seed),
+            generator=generator,
+        )
+
+    @property
+    def config_feature_columns(self) -> tuple[str, ...]:
+        """从统一 FeatureConfig 推导 Dataset 输入列。"""
+        return tuple(FeatureTransformer(self.config.features).feature_columns())
+
+    def _require_dataset(self, name: str) -> LOBWindowDataset:
+        dataset = cast(LOBWindowDataset | None, getattr(self, name))
+        if dataset is None:
+            raise RuntimeError(f"{name} is not initialized; call setup() first")
+        return dataset
