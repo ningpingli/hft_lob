@@ -142,7 +142,7 @@ class Complete_HCNN(nn.Module):
         self.lstm = nn.LSTM(
             input_size=96, hidden_size=32, num_layers=1, batch_first=True
         )
-        self.fc1 = nn.Linear(32, 1)
+        self.regression_head = nn.Linear(32, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -186,6 +186,6 @@ class Complete_HCNN(nn.Module):
 
         x, _ = self.lstm(x)
         x = x[:, -1, :]
-        logits = self.fc1(x)
+        prediction = self.regression_head(x)
 
-        return logits
+        return prediction

@@ -97,7 +97,7 @@ class DLA(nn.Module):
         h_tilde = torch.flatten(h_tilde, start_dim=1)
         # h_tilde.shape = [batch_size, hidden_size * num_snapshots]
 
-        logits = self.W3(h_tilde)
-        # logits.shape = [batch_size, 1]（回归读出头）
+        prediction = self.W3(h_tilde)
+        # prediction.shape = [batch_size, 1]（回归读出头）
 
-        return logits
+        return prediction

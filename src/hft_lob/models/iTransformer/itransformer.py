@@ -58,7 +58,7 @@ class ITransformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers, norm=encoder_norm
         )
-        self.cat_head = nn.Linear(d_model, 1)
+        self.regression_head = nn.Linear(d_model, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -90,5 +90,5 @@ class ITransformer(nn.Module):
         # 回归读出头（均值池化）
         x = torch.mean(x, dim=1)
 
-        logits = self.cat_head(x)
-        return logits
+        prediction = self.regression_head(x)
+        return prediction

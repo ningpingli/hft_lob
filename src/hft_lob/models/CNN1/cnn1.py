@@ -14,7 +14,6 @@ class CNN1(nn.Module):
     def __init__(
         self,
         num_features: int = 20,
-        num_classes: int = 1,
         history_length: int = 100,
         temp: int | None = None,
     ) -> None:
@@ -22,7 +21,6 @@ class CNN1(nn.Module):
 
         Args:
             num_features: 每快照特征数。
-            num_classes: 输出类别数（回归为 1）。
             history_length: 历史窗口长度。
             temp: 卷积池化堆叠后的时间长度；None 时由 history_length 推导。
         """
@@ -69,7 +67,7 @@ class CNN1(nn.Module):
         self.relu5 = nn.LeakyReLU()
 
         # 全连接 2（回归读出头）
-        self.fc2 = nn.Linear(64, num_classes)
+        self.regression_head = nn.Linear(64, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -78,7 +76,7 @@ class CNN1(nn.Module):
             x: 统一时序输入 ``[B,T,F]``；卷积通道维由本模型内部增加。
 
         Returns:
-            模型输出 ``(N, num_classes)``。
+            无界回归预测，形状为 ``(N, 1)``。
 
         Raises:
             ValueError: 特征维度与构造契约不一致。
@@ -127,6 +125,6 @@ class CNN1(nn.Module):
         out = self.relu5(out)
 
         # 回归读出头
-        out = self.fc2(out)
+        out = self.regression_head(out)
 
         return cast(torch.Tensor, out)

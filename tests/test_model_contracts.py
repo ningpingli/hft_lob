@@ -32,6 +32,8 @@ from hft_lob.configs.experiment import (
     WindowConfig,
 )
 from hft_lob.models import build_model
+from hft_lob.models.CNN1.cnn1 import CNN1
+from hft_lob.models.CNN2.cnn2 import CNN2
 
 #: 5 档盘口契约（20 特征 / 100 快照 / 5 档）。
 _FEATURES = 20
@@ -91,6 +93,27 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
     model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
     out = model(model_input)
     assert out.shape == (2, 1)
+
+
+@pytest.mark.parametrize("model_type", (CNN1, CNN2))
+def test_cnn_output_dimension_is_not_configurable(model_type: type[torch.nn.Module]) -> None:
+    """分类时代的 num_classes 参数不能重新引入多列输出。"""
+    with pytest.raises(TypeError, match="num_classes"):
+        model_type(num_classes=3)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize("name", _FORWARD_NAMES)
+def test_all_registered_models_have_scalar_regression_output(
+    name: str, sample: torch.Tensor
+) -> None:
+    model = build_model(
+        _make_config(name),
+        feature_columns=[f"f{i}" for i in range(_FEATURES)],
+    )
+    model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
+    prediction = model(model_input)
+    assert prediction.ndim == 2
+    assert prediction.shape[-1] == 1
 
 
 def test_hlob_constructs_and_forwards_with_minimal_structures(

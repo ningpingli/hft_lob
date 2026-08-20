@@ -12,7 +12,6 @@ class CNN2(nn.Module):
     def __init__(
         self,
         num_features: int = 20,
-        num_classes: int = 1,
         history_length: int = 100,
         temp: int | None = None,
     ) -> None:
@@ -20,7 +19,6 @@ class CNN2(nn.Module):
 
         Args:
             num_features: 每快照特征数。
-            num_classes: 输出类别数（回归为 1）。
             history_length: 历史窗口长度。
             temp: 卷积池化堆叠后的时间长度；None 时由 history_length 推导。
         """
@@ -70,7 +68,7 @@ class CNN2(nn.Module):
         self.prelu6 = nn.PReLU()
 
         # 全连接 2（回归读出头）
-        self.fc2 = nn.Linear(32, num_classes)
+        self.regression_head = nn.Linear(32, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -79,7 +77,7 @@ class CNN2(nn.Module):
             x: 输入张量 ``(N, 1, history_length, num_features)``。
 
         Returns:
-            模型输出 ``(N, num_classes)``。
+            无界回归预测，形状为 ``(N, 1)``。
 
         Raises:
             ValueError: 特征维度与构造契约不一致。
@@ -126,6 +124,6 @@ class CNN2(nn.Module):
         out = self.prelu6(out)
 
         # 回归读出头
-        out = self.fc2(out)
+        out = self.regression_head(out)
 
         return out

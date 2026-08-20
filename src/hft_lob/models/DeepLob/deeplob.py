@@ -109,7 +109,7 @@ class DeepLOB(nn.Module):
         self.lstm = nn.LSTM(
             input_size=192, hidden_size=64, num_layers=1, batch_first=True
         )
-        self.fc1 = nn.Linear(64, 1)
+        self.regression_head = nn.Linear(64, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -151,6 +151,6 @@ class DeepLOB(nn.Module):
 
         x, _ = self.lstm(x)
         x = x[:, -1, :]
-        logits = self.fc1(x)
+        prediction = self.regression_head(x)
 
-        return cast(torch.Tensor, logits)
+        return cast(torch.Tensor, prediction)
