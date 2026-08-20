@@ -7,11 +7,35 @@ split / model_version / dataset_version，否则无法定位异常预测。
 
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
+import polars as pl
 
 from hft_lob.datasets.lob_dataset import SampleMeta
+
+_ARTIFACT_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "model_name": pl.String,
+    "model_version": pl.String,
+    "dataset_version": pl.String,
+    "fold_index": pl.Int64,
+    "split": pl.String,
+    "ticker": pl.String,
+    "trade_date": pl.String,
+    "session_id": pl.String,
+    "anchor_timestamp": pl.Datetime("us"),
+    "mid_t": pl.Float64,
+    "future_mid": pl.Float64,
+    "target": pl.Float64,
+    "prediction": pl.Float64,
+    "bid1": pl.Float64,
+    "ask1": pl.Float64,
+    "spread": pl.Float64,
+}
 
 
 @dataclass(frozen=True)
@@ -27,10 +51,59 @@ class PredictionArtifact:
     fold_index: int
     split: str
 
+    def __post_init__(self) -> None:
+        predictions = _as_vector(self.predictions, field="predictions")
+        targets = _as_vector(self.targets, field="targets")
+        metadata = tuple(self.metadata)
+        if predictions.size == 0:
+            raise ValueError("prediction artifact must not be empty")
+        if predictions.size != targets.size or predictions.size != len(metadata):
+            raise ValueError(
+                "predictions, targets and metadata must have the same sample count"
+            )
+        for field, value in (
+            ("model_name", self.model_name),
+            ("model_version", self.model_version),
+            ("dataset_version", self.dataset_version),
+            ("split", self.split),
+        ):
+            if not value.strip():
+                raise ValueError(f"{field} must not be empty")
+        if self.fold_index <= 0:
+            raise ValueError("fold_index must be > 0")
 
-def git_commit() -> str:
-    """当前 git 短提交（§29 可复现；非 git 仓库返回 'unknown'）。"""
-    raise NotImplementedError("git_commit not implemented")
+        sample_keys: set[tuple[str, str, str, str]] = set()
+        tickers: set[str] = set()
+        for index, meta in enumerate(metadata):
+            if not meta.ticker or not meta.trade_date or not meta.session_id:
+                raise ValueError(f"metadata[{index}] identity fields must not be empty")
+            timestamp = _parse_anchor_timestamp(meta.anchor_timestamp)
+            if timestamp.date().isoformat() != meta.trade_date:
+                raise ValueError(
+                    f"metadata[{index}] trade_date does not match anchor_timestamp"
+                )
+            numeric = (
+                meta.mid_t,
+                meta.future_mid,
+                meta.bid1,
+                meta.ask1,
+                meta.spread,
+            )
+            if not np.isfinite(np.asarray(numeric, dtype=np.float64)).all():
+                raise ValueError(f"metadata[{index}] contains non-finite numeric values")
+            key = (meta.ticker, meta.trade_date, meta.session_id, meta.anchor_timestamp)
+            if key in sample_keys:
+                raise ValueError(f"duplicate prediction sample metadata: {key}")
+            sample_keys.add(key)
+            tickers.add(meta.ticker)
+        if len(tickers) != 1:
+            raise ValueError("prediction artifact must contain exactly one ticker")
+
+        predictions.setflags(write=False)
+        targets.setflags(write=False)
+        object.__setattr__(self, "predictions", predictions)
+        object.__setattr__(self, "targets", targets)
+        object.__setattr__(self, "metadata", metadata)
 
 
 def save_prediction_artifact(
@@ -47,4 +120,72 @@ def save_prediction_artifact(
     Returns:
         输出路径。
     """
-    raise NotImplementedError("save_prediction_artifact not implemented")
+    destination = Path(path)
+    if destination.suffix.lower() != ".parquet":
+        raise ValueError("prediction artifact path must end with .parquet")
+
+    records: list[dict[str, object]] = []
+    for prediction, target, meta in zip(
+        artifact.predictions,
+        artifact.targets,
+        artifact.metadata,
+        strict=True,
+    ):
+        records.append(
+            {
+                "model_name": artifact.model_name,
+                "model_version": artifact.model_version,
+                "dataset_version": artifact.dataset_version,
+                "fold_index": artifact.fold_index,
+                "split": artifact.split,
+                "ticker": meta.ticker,
+                "trade_date": meta.trade_date,
+                "session_id": meta.session_id,
+                "anchor_timestamp": _parse_anchor_timestamp(meta.anchor_timestamp),
+                "mid_t": meta.mid_t,
+                "future_mid": meta.future_mid,
+                "target": float(target),
+                "prediction": float(prediction),
+                "bid1": meta.bid1,
+                "ask1": meta.ask1,
+                "spread": meta.spread,
+            }
+        )
+    frame = pl.DataFrame(records, schema=_ARTIFACT_SCHEMA, strict=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+        frame.write_parquet(temporary_path)
+        os.replace(temporary_path, destination)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+    return str(destination.resolve())
+
+
+def _as_vector(values: np.ndarray, *, field: str) -> np.ndarray:
+    array = np.asarray(values, dtype=np.float64)
+    if array.ndim == 2 and array.shape[1] == 1:
+        array = array[:, 0]
+    if array.ndim != 1:
+        raise ValueError(f"{field} must have shape [N] or [N, 1], got {array.shape}")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{field} must contain only finite values")
+    return np.ascontiguousarray(array.copy())
+
+
+def _parse_anchor_timestamp(value: str) -> datetime:
+    try:
+        timestamp = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid anchor_timestamp: {value!r}") from exc
+    if timestamp.tzinfo is not None:
+        raise ValueError("anchor_timestamp must be timezone-naive")
+    return timestamp
