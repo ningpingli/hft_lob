@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import torch
 from torch.utils.data import Dataset
 
-from hft_lob.preprocessing.normalize import TensorNormalizer
+from hft_lob.preprocessing.normalize import FrameStandardizer
 
 #: 构造样本所需的处理列（元数据侧）。
 _META_COLUMNS: tuple[str, ...] = (
@@ -55,8 +55,9 @@ class LOBWindowDataset(Dataset):
     - 窗口与标签只在 same trade_date AND same session_id 内构造（§3.1）；
     - 每个 processed 文件只能包含一个 trade_date/session_id；多 session 文件
       立即拒绝，不能依赖调用方记得 group-by；
-    - 窗口内所有行必须 ``book_valid AND feature_valid``；只有 anchor 行必须
-      ``target_valid``，历史行不因自身未来标签无效而被删除；
+    - 窗口内所有行必须 ``book_valid AND feature_valid``；启用 standardizer 时还
+      必须 ``normalization_valid``；只有 anchor 行必须 ``target_valid``，历史行
+      不因自身未来标签无效而被删除；
     - 不变量（单元测试必须检查）：``max(timestamp(X)) == anchor_timestamp``。
     """
 
@@ -69,7 +70,7 @@ class LOBWindowDataset(Dataset):
         feature_cols: Sequence[str],
         target_col: str,
         cache_size: int = 4,
-        normalizer: TensorNormalizer | None = None,
+        standardizer: FrameStandardizer | None = None,
     ) -> None:
         """初始化数据集：逐文件逐 session 扫描有效样本并建立索引。
 
@@ -80,8 +81,8 @@ class LOBWindowDataset(Dataset):
             feature_cols: 模型输入特征列（23 原始，或 +派生）。
             target_col: 主标签列名（§7.1）。
             cache_size: 文件内存缓存上限（按文件数计，FIFO 逐出）。
-            normalizer: 仅从 training split 拟合并冻结的归一化器；Dataset 是
-                唯一调用 ``transform_tensor`` 的位置，None 表示不归一化。
+            standardizer: 严格因果的滚动标准化器；Dataset 在单-session 文件
+                加载后、随机切窗前统一调用，None 表示不标准化。
 
         Raises:
             ValueError: 参数非法，或任一文件包含多个 trade_date/session_id。

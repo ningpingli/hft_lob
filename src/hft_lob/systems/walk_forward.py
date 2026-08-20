@@ -16,7 +16,7 @@ class FoldResult:
     fold_index: int
     candidate_name: str
     dataset_version: str
-    normalizer_state_path: str
+    standardizer_state_path: str
     checkpoint_path: str | None
     predictions_path: str
     evaluation: EvaluationReport
@@ -37,10 +37,10 @@ def run_walk_forward(
 ) -> WalkForwardReport:
     """执行统一闭环。
 
-    每个 fold 独立解析文件、仅用训练段拟合 normalizer；主模型及配置中的所有
+    每个 fold 独立解析文件；特征使用仅依赖当前时刻之前窗口的因果标准化；主模型及配置中的所有
     Zero/Imbalance/Ridge/MLP 均属于 baseline，由 baseline runner 统一适配；主模型
     经 LOBLightningModule 执行。所有 candidate 生成同一 PredictionArtifact parquet，
-    再由 build_evaluation_report 评估。禁止跨 fold 复用 normalizer/checkpoint。
+    再由 build_evaluation_report 评估。禁止跨 fold 复用 checkpoint。
     checkpoint 和 early stopping 必须使用 ``config.training.monitor_metric`` 与
     ``config.training.monitor_mode``，不允许 runner 自行定义另一套指标名。
     """

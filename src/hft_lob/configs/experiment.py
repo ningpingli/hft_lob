@@ -94,9 +94,16 @@ class FeatureConfig:
 
 @dataclass(frozen=True)
 class NormalizationConfig:
-    """归一化（§12）：只允许 t 之前（或 train 段）信息；禁止全量统计。"""
+    """严格因果滚动标准化（§12）：统计量只能来自当前时刻之前。"""
 
-    mode: str = "train_only"  # MVP 唯一允许值
+    mode: str = "causal_rolling"
+    normalize_window: int = 180
+
+    def __post_init__(self) -> None:
+        if self.mode != "causal_rolling":
+            raise ValueError("normalization.mode must be 'causal_rolling'")
+        if self.normalize_window < 2:
+            raise ValueError("normalization.normalize_window must be >= 2")
 
 
 @dataclass(frozen=True)

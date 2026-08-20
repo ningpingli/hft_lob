@@ -31,7 +31,7 @@ def main() -> None:
     4. 备份配置（backup_experiment_config）
     5. 构建日志器（build_logger）
     6. prepare_dataset 生成固定版本和 WalkForwardPlan
-    7. run_walk_forward 对每个 fold 独立拟合 normalizer 并运行模型/baseline
+    7. run_walk_forward 使用严格因果滚动标准化并运行模型/baseline
     8. 所有 candidate 输出 PredictionArtifact
     9. build_evaluation_report 输出 EvaluationReport/FoldResult
     """

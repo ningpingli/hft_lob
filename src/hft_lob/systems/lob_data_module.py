@@ -3,7 +3,7 @@
 职责单一：
 - 不执行 ETL（raw→processed 由 ``prepare_dataset`` 完成）；
 - 不做切分决策（文件清单由 walk-forward runner 按 fold 注入）；
-- 只负责：按阶段构造 ``LOBWindowDataset``、train-only 归一化（§12）、按 loader
+- 只负责：按阶段构造 ``LOBWindowDataset``、因果滚动标准化（§12）、按 loader
   配置装配 ``DataLoader``。processed parquet 是唯一缓存层。
 """
 
@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import ExperimentConfig
 from hft_lob.datasets.lob_dataset import LOBBatch, LOBWindowDataset, SampleMeta
-from hft_lob.preprocessing.normalize import TensorNormalizer
+from hft_lob.preprocessing.normalize import FrameStandardizer
 from hft_lob.preprocessing.pipeline import PreparedDataset
 
 
@@ -69,8 +69,8 @@ class LOBDataModule(pl.LightningDataModule):
     - processed parquet 是唯一数据缓存层，不缓存/序列化整个 Dataset；
     - ``setup(stage)``：每进程执行，赋值 ``self.{train,val,test,predict}_dataset``；
       回归语义下 predict 与 test 共用同一数据集（推理 = 测试窗口数据，§33）；
-    - 归一化：runner 先调用 ``fit_train_only_normalizer(training_files)``，再将
-      冻结 normalizer 注入本模块；所有 Dataset 共享它且只应用一次；
+    - 标准化：所有 Dataset 共享同一个因果滚动标准化配置，在单-session 文件
+      加载后、随机采样前应用；
     - 确定性：train shuffle 使用根 ``config.seed`` 播种的 generator，
       ``_seed_worker`` 逐 worker 重播种（§29）。
     """
@@ -80,14 +80,14 @@ class LOBDataModule(pl.LightningDataModule):
         config: ExperimentConfig,
         *,
         stage_files: StageFiles,
-        normalizer: TensorNormalizer,
+        standardizer: FrameStandardizer,
     ) -> None:
         """初始化数据模块。
 
         Args:
             config: 实验配置根（data/loader/window/features/target/normalization 段）。
             stage_files: 已绑定 dataset_version/fold 的三段文件清单。
-            normalizer: 仅由当前 fold training files 拟合的冻结归一化器。
+            standardizer: 严格因果的滚动标准化器，不包含全训练集统计量。
         """
         super().__init__()
         self.config = config
@@ -98,7 +98,7 @@ class LOBDataModule(pl.LightningDataModule):
         self.val_dataset: LOBWindowDataset | None = None
         self.test_dataset: LOBWindowDataset | None = None
         self.predict_dataset: LOBWindowDataset | None = None
-        self.normalizer = normalizer
+        self.standardizer = standardizer
 
     @property
     def dataset_version(self) -> str | None:
@@ -147,9 +147,9 @@ class LOBDataModule(pl.LightningDataModule):
         self,
         files: Sequence[str],
         *,
-        normalizer: TensorNormalizer | None = None,
+        standardizer: FrameStandardizer | None = None,
     ) -> LOBWindowDataset:
-        """构造 Dataset；所有 split 共享仅由 training split 拟合的 normalizer。"""
+        """构造 Dataset；所有 split 使用同一套严格因果滚动标准化语义。"""
         raise NotImplementedError("LOBDataModule._make_dataset not implemented")
 
     def _make_loader(self, dataset: LOBWindowDataset, *, shuffle: bool) -> DataLoader:

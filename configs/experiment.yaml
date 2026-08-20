@@ -65,7 +65,8 @@ features:
                      price_slope, volume_slope]
 
 normalization:
-  mode: train_only            # MVP 唯一开放模式
+  mode: causal_rolling        # t 时刻仅使用此前快照的统计量
+  normalize_window: 180       # 独立于模型输入窗口的滚动统计长度
 
 loader:
   batch_size: 128

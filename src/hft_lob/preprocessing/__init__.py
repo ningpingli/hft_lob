@@ -4,9 +4,8 @@ from hft_lob.preprocessing.clean import CleanDayResult, DataCleaner, SessionSegm
 from hft_lob.preprocessing.features import FeatureTransformer
 from hft_lob.preprocessing.labels import LabelTransformer
 from hft_lob.preprocessing.normalize import (
-    TensorNormalizer,
-    TrainOnlyNormalizer,
-    fit_train_only_normalizer,
+    CausalRollingStandardizer,
+    FrameStandardizer,
 )
 from hft_lob.preprocessing.pipeline import PreparedDataset, prepare_dataset
 from hft_lob.preprocessing.quality import QualityReport, run_quality_checks
@@ -21,10 +20,9 @@ __all__ = [
     "PreparedDataset",
     "QualityReport",
     "SessionSegment",
-    "TensorNormalizer",
-    "TrainOnlyNormalizer",
+    "CausalRollingStandardizer",
+    "FrameStandardizer",
     "WalkForwardPlan",
-    "fit_train_only_normalizer",
     "prepare_dataset",
     "run_quality_checks",
 ]
