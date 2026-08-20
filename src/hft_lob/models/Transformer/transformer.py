@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 
-class SinusoidalPositionalEmbedding(nn.Embedding):
+class SinusoidalPositionalEmbedding(nn.Module):
     """生成任意长度的正弦位置嵌入（cos 特征位于向量后半部分）。"""
 
     def __init__(

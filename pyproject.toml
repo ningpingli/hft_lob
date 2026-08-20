@@ -65,3 +65,10 @@ no_implicit_optional = true
 check_untyped_defs = true
 ignore_missing_imports = true
 files = ["src/hft_lob"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.3",
+]

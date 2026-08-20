@@ -5,10 +5,10 @@ from hft_lob.systems.lob_data_module import LOBDataModule, StageFiles
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.losses import LOSS_NAMES, build_loss
 from hft_lob.systems.metrics import (
+    METRIC_NAMES,
     ConfidenceInterval,
     DailyMetricRecord,
     EvaluationReport,
-    METRIC_NAMES,
     PredictionBinRecord,
     block_bootstrap_confidence_interval,
     build_evaluation_report,
