@@ -51,6 +51,12 @@ model:
   output_dim: 1
   num_features: null          # null → 由特征工程决定（23 或 +派生）
 
+baselines:
+  names: [zero, imbalance, ridge, mlp]  # §17：复杂模型前必须完成的基线
+  ridge_alpha: 1.0
+  mlp_hidden_dim: 64
+  mlp_dropout: 0.1
+
 training:
   loss: huber                 # primary：Huber（§20）
   loss_huber_delta: 1.0
@@ -68,7 +74,7 @@ evaluation:
 
 split:
   strategy: chronological     # 按完整交易日切分，禁止 random row split（§15）
-  walk_forward: false
+  walk_forward: true          # MVP 冻结规格：必须执行 walk-forward（§16/§42）
   train_ratio: 0.6
   validation_ratio: 0.2
   train_dates: null           # 可选显式日期范围 ["2025-01-01", "2025-08-31"]

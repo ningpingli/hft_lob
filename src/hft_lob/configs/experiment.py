@@ -121,6 +121,16 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class BaselineConfig:
+    """MVP 基线（§17）：Zero / Imbalance / Ridge / 轻量 MLP。"""
+
+    names: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
+    ridge_alpha: float = 1.0
+    mlp_hidden_dim: int = 64
+    mlp_dropout: float = 0.1
+
+
+@dataclass(frozen=True)
 class TrainingConfig:
     """训练（§20/§29）：primary loss = huber；全随机种子。"""
 
@@ -150,7 +160,7 @@ class SplitConfig:
     """切分（§15/§16）：chronological（禁止 random row split）；walk-forward 可选。"""
 
     strategy: str = "chronological"
-    walk_forward: bool = False
+    walk_forward: bool = True
     train_ratio: float = 0.6
     validation_ratio: float = 0.2
     train_dates: tuple[str, str] | None = None  # 可选显式日期范围（含两端，%Y-%m-%d）
@@ -172,6 +182,7 @@ class ExperimentConfig:
     normalization: NormalizationConfig
     loader: LoaderConfig
     model: ModelConfig
+    baselines: BaselineConfig
     training: TrainingConfig
     evaluation: EvaluationConfig
     split: SplitConfig
