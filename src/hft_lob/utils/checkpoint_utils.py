@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-import yaml
+from hft_lob.utils._yaml_io import atomic_dump_yaml
 
 
 def resolve_ckpt_path(
@@ -54,32 +52,5 @@ def backup_experiment_config(
     """
     directory = Path(log_dir).expanduser()
     destination = directory / filename
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            newline="\n",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            yaml.safe_dump(
-                config,
-                temporary,
-                allow_unicode=True,
-                sort_keys=False,
-                default_flow_style=False,
-            )
-            temporary.flush()
-            os.fsync(temporary.fileno())
-        os.replace(temporary_path, destination)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
-
+    atomic_dump_yaml(destination, config)
     return str(destination)
