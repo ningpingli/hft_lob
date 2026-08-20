@@ -1,4 +1,7 @@
-"""纯模型层：统一 ``forward(x) -> [B, 1]`` 契约（需求文档 §18）。
+"""纯模型层：统一 ``forward([B,T,F]) -> [B,1]`` 契约（需求文档 §18）。
+
+``[B,T,F]`` 是与模型无关的数据语义；CNN/DeepLOB 在各自 ``forward`` 内部
+增加 channel 维，Transformer 类模型直接消费三维输入。
 
 MVP 模型接口：``cnn1`` / ``deeplob``（§1.1/§17/§39）；MLP 属 baseline。
 其余模型（transformer
@@ -35,7 +38,7 @@ def build_model(
     feature_columns: Sequence[str],
     homological_structures: dict[str, Any] | None = None,
 ) -> nn.Module:
-    """按配置实例化模型（§18：统一 forward(x) -> [B, 1]）。
+    """按配置实例化模型（§18：统一 forward([B,T,F]) -> [B,1]）。
 
     Args:
         config: 实验配置根（model 段 + window/features 契约）。

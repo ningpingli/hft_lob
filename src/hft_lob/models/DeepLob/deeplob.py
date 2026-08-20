@@ -26,7 +26,7 @@ class DeepLOB(nn.Module):
         """前向传播。
 
         Args:
-            x: 输入张量。
+            x: 统一时序输入 ``[B,T,F]``；卷积通道维由本模型内部增加。
 
         Returns:
             模型输出。
