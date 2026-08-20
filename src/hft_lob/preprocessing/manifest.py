@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from typing import Any
+
 import polars as pl
 
 from hft_lob.configs.experiment import FeatureConfig, TargetConfig
@@ -9,23 +12,39 @@ from hft_lob.configs.experiment import FeatureConfig, TargetConfig
 #: manifest 列（固定顺序；§31 Data Manifest）。
 _MANIFEST_COLUMNS: tuple[str, ...] = (
     "ticker", "trade_date", "session_id", "source_file", "processed_file",
+    "raw_hash", "processing_config_hash", "dataset_version",
     "row_count", "valid_row_count", "data_start", "data_end",
     "feature_version", "label_version", "quality_status",
 )
 
 
-def dataset_version(ticker: str, dates: list[str]) -> str:
-    """数据集版本标识：``<ticker>_<首日>_<末日>``。"""
-    if not dates:
-        return f"{ticker}_empty"
-    return f"{ticker}_{min(dates)}_{max(dates)}"
+def raw_file_hash(path: str, *, algorithm: str = "sha256") -> str:
+    """流式计算 raw 文件内容哈希，不依赖路径、mtime 或文件名。"""
+    raise NotImplementedError("raw_file_hash not implemented")
+
+
+def stable_config_hash(config: Mapping[str, Any]) -> str:
+    """对 key 排序后的 canonical 配置计算稳定 SHA-256 哈希。"""
+    raise NotImplementedError("stable_config_hash not implemented")
+
+
+def dataset_version(
+    ticker: str,
+    raw_hashes: Sequence[str],
+    *,
+    processing_config_hash: str,
+) -> str:
+    """生成内容寻址的数据集版本。
+
+    版本由 ticker、排序后的 raw 内容哈希及完整处理配置哈希共同决定；字段映射
+    属于处理配置，因此 raw 内容、映射或处理语义变化都会产生新版本。
+    """
+    raise NotImplementedError("dataset_version not implemented")
 
 
 def feature_version(config: FeatureConfig) -> str:
-    """特征版本：``raw23`` 或 ``raw23+<派生数>``。"""
-    if not config.use_derived:
-        return "raw23"
-    return f"raw23+{len(config.derived_features)}"
+    """由启用状态、特征名称及顺序生成稳定版本，不以特征数量代替版本。"""
+    raise NotImplementedError("feature_version not implemented")
 
 
 def label_version(config: TargetConfig) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import polars as pl
@@ -48,12 +49,19 @@ class DataCleaner:
     - AM/PM 返回两个独立 segment，不在同一个 DataFrame 中拼接。
     """
 
-    def __init__(self, sessions: SessionConfig, max_ffill_gap_seconds: int) -> None:
+    def __init__(
+        self,
+        sessions: SessionConfig,
+        max_ffill_gap_seconds: int,
+        *,
+        column_mapping: Mapping[str, str],
+    ) -> None:
         """初始化清洗器。
 
         Args:
             sessions: 交易时段配置（§3）。
             max_ffill_gap_seconds: 缺失策略 gap 上限（§5）。
+            column_mapping: 配置文件中的 ``原始列名 -> canonical 列名`` 映射。
         """
         raise NotImplementedError("DataCleaner.__init__ not implemented")
 
@@ -69,6 +77,6 @@ class DataCleaner:
 
         Raises:
             FileNotFoundError: 文件不存在。
-            ValueError: 缺少必需列（20 盘口 + timestamp）。
+            ValueError: 映射后仍缺少必需列，或多个原始列映射到同一 canonical 列。
         """
         raise NotImplementedError("DataCleaner.clean_day not implemented")

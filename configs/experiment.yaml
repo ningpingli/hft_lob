@@ -12,6 +12,34 @@ data:
   raw_dir: data/raw           # 原始 parquet 根目录（immutable，只读）
   processed_dir: data/processed
   manifest_dir: data/datasets
+  # 原始文件列名 → 项目内部统一列名；不同数据源只需修改这里
+  column_mapping:
+    AskPrice1: ASKp1
+    AskVolume1: ASKs1
+    BidPrice1: BIDp1
+    BidVolume1: BIDs1
+    AskPrice2: ASKp2
+    AskVolume2: ASKs2
+    BidPrice2: BIDp2
+    BidVolume2: BIDs2
+    AskPrice3: ASKp3
+    AskVolume3: ASKs3
+    BidPrice3: BIDp3
+    BidVolume3: BIDs3
+    AskPrice4: ASKp4
+    AskVolume4: ASKs4
+    BidPrice4: BIDp4
+    BidVolume4: BIDs4
+    AskPrice5: ASKp5
+    AskVolume5: ASKs5
+    BidPrice5: BIDp5
+    BidVolume5: BIDs5
+    timestamp: timestamp
+    trade_date: trade_date
+    ticker: ticker
+    last: last
+    amount: amount
+    volumn: volume
 
 target:
   type: log_mid_return        # 主标签：log(mid[t+60]/mid[t])（§7.1）

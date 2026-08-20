@@ -6,7 +6,7 @@ window / features / normalization / loader / model / training / evaluation / spl
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 #: A 股连续竞价时段（半开区间 [start, end)）。
 MORNING_SESSION: tuple[str, str] = ("09:30:00", "11:30:00")
@@ -45,6 +45,7 @@ class DataConfig:
     raw_dir: str = "data/raw"  # 原始 parquet 根目录（只读，immutable）
     processed_dir: str = "data/processed"  # 清洗 + 特征 + 标签落盘根目录
     manifest_dir: str = "data/datasets"  # split manifest 根目录
+    column_mapping: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

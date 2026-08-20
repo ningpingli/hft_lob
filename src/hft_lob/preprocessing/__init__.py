@@ -8,7 +8,9 @@ from hft_lob.preprocessing.manifest import (
     dataset_version,
     feature_version,
     label_version,
+    raw_file_hash,
     read_manifest,
+    stable_config_hash,
     write_manifest,
 )
 from hft_lob.preprocessing.normalize import CausalRollingNormalizer, TrainOnlyNormalizer
@@ -40,8 +42,10 @@ __all__ = [
     "label_column",
     "label_version",
     "read_manifest",
+    "raw_file_hash",
     "run_pipeline",
     "run_quality_checks",
+    "stable_config_hash",
     "walk_forward_folds",
     "write_manifest",
 ]
