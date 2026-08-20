@@ -1,6 +1,7 @@
 """纯模型层：统一 ``forward(x) -> [B, 1]`` 契约（需求文档 §18）。
 
-MVP 接口：``cnn1`` / ``deeplob`` / ``mlp``（§1.1/§17/§39）。其余模型（transformer
+MVP 模型接口：``cnn1`` / ``deeplob``（§1.1/§17/§39）；MLP 属 baseline。
+其余模型（transformer
 / itransformer / lobtransformer / cnn2 / axiallob / dla / binbtabl / binctabl /
 hlob）**接口保留、暂不实现**（构造/前向为 ``raise NotImplementedError`` 骨架，
 待 §39 Phase 3-4 分阶段实装）。所有模型均为纯 ``torch.nn.Module``，训练职责由
@@ -16,7 +17,7 @@ from typing import Any
 from torch import nn
 
 from hft_lob.configs.experiment import ExperimentConfig
-from hft_lob.models.AxialLob.axiallob import AxialLOB, GatedAxialAttention
+from hft_lob.models.AxialLob.axiallob import AxialLOB
 from hft_lob.models.CNN1.cnn1 import CNN1
 from hft_lob.models.CNN2.cnn2 import CNN2
 from hft_lob.models.CompleteHCNN.complete_hcnn import Complete_HCNN
@@ -24,11 +25,8 @@ from hft_lob.models.DeepLob.deeplob import DeepLOB
 from hft_lob.models.DLA.DLA import DLA
 from hft_lob.models.iTransformer.itransformer import ITransformer
 from hft_lob.models.LobTransformer.lobtransformer import LobTransformer
-from hft_lob.models.TABL.bin_nn import BiN
 from hft_lob.models.TABL.bin_tabl import BiN_BTABL, BiN_CTABL
-from hft_lob.models.TABL.bl_layer import BL_layer
-from hft_lob.models.TABL.tabl_layer import TABL_layer
-from hft_lob.models.Transformer.transformer import SinusoidalPositionalEmbedding, Transformer
+from hft_lob.models.Transformer.transformer import Transformer
 
 
 def build_model(
@@ -90,28 +88,10 @@ def build_model(
             )
         return Complete_HCNN(homological_structures=homological_structures, num_features=num_features)
     raise ValueError(
-        f"Unsupported model {name!r}; registered: cnn1 | deeplob | mlp | transformer | "
+        f"Unsupported model {name!r}; registered: cnn1 | deeplob | transformer | "
         "itransformer | lobtransformer | cnn2 | axiallob | dla | binbtabl | "
         "binctabl | hlob"
     )
 
 
-__all__ = [
-    "AxialLOB",
-    "BiN",
-    "BiN_BTABL",
-    "BiN_CTABL",
-    "BL_layer",
-    "CNN1",
-    "CNN2",
-    "Complete_HCNN",
-    "DLA",
-    "DeepLOB",
-    "GatedAxialAttention",
-    "ITransformer",
-    "LobTransformer",
-    "SinusoidalPositionalEmbedding",
-    "TABL_layer",
-    "Transformer",
-    "build_model",
-]
+__all__ = ["CNN1", "DeepLOB", "build_model"]

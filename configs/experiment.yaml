@@ -78,13 +78,12 @@ loader:
 model:
   name: cnn1                  # MVP：cnn1 | deeplob（§18/§39）
   output_dim: 1
-  hidden_dim: 64              # MLP 使用
-  dropout: 0.1                # MLP 使用
 
 baselines:
-  statistical_names: [zero, imbalance, ridge]
-  neural_names: [mlp]         # 经 LOBLightningModule 训练，仍属于必须比较的基线
+  names: [zero, imbalance, ridge, mlp]
   ridge_alpha: 1.0
+  mlp_hidden_dim: 64
+  mlp_dropout: 0.1
 
 training:
   loss: huber                 # primary：Huber（§20）

@@ -7,13 +7,14 @@ from collections.abc import Sequence
 from hft_lob.baselines.base import BaselineModel
 from hft_lob.baselines.models import (
     ImbalanceBaseline,
+    MLPBaseline,
     RidgeBaseline,
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
 from hft_lob.configs.experiment import ExperimentConfig
 
-BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge")
+BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
 
 
 def build_baseline(
@@ -25,7 +26,7 @@ def build_baseline(
     """按实验配置构建 baseline。
 
     Args:
-        name: ``zero`` / ``imbalance`` / ``ridge``。
+        name: ``zero`` / ``imbalance`` / ``ridge`` / ``mlp``。
         config: 特征数、窗口长度及 baseline 参数的唯一来源。
         feature_columns: PreparedDataset 产出的唯一特征 schema。
 
@@ -47,11 +48,11 @@ def volume_feature_indices(
 
 __all__ = [
     "BASELINE_NAMES",
-    "BaselineRunner",
     "BaselineModel",
+    "BaselineRunner",
     "ImbalanceBaseline",
+    "MLPBaseline",
     "RidgeBaseline",
     "ZeroBaseline",
     "build_baseline",
-    "volume_feature_indices",
 ]

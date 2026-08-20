@@ -11,8 +11,8 @@ import torch
 class BaselineModel(Protocol):
     """非梯度 baseline 的最小公共协议。
 
-    Zero/Imbalance/Ridge 接收与神经网络相同的输入输出。MLP 属神经模型，走
-    ``LOBLightningModule``，不属于本协议。
+    Zero/Imbalance/Ridge/MLP 均接收与主模型相同的输入输出，并由
+    ``BaselineRunner`` 统一适配为 PredictionArtifact。
     """
 
     def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:

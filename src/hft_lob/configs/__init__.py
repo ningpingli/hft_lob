@@ -1,1 +1,41 @@
-"""configs 包：实验配置（YAML 数据真源由后续阶段填入）。"""
+"""公开实验配置契约。"""
+
+from hft_lob.configs.experiment import (
+    RAW_FEATURE_COLUMNS,
+    BaselineConfig,
+    CleaningConfig,
+    DataConfig,
+    EvaluationConfig,
+    ExperimentConfig,
+    FeatureConfig,
+    LoaderConfig,
+    ModelConfig,
+    NormalizationConfig,
+    SessionConfig,
+    SplitConfig,
+    TargetConfig,
+    TaskConfig,
+    TrainingConfig,
+    WindowConfig,
+)
+from hft_lob.configs.loader import load_config
+
+__all__ = [
+    "RAW_FEATURE_COLUMNS",
+    "BaselineConfig",
+    "CleaningConfig",
+    "DataConfig",
+    "EvaluationConfig",
+    "ExperimentConfig",
+    "FeatureConfig",
+    "LoaderConfig",
+    "ModelConfig",
+    "NormalizationConfig",
+    "SessionConfig",
+    "SplitConfig",
+    "TargetConfig",
+    "TaskConfig",
+    "TrainingConfig",
+    "WindowConfig",
+    "load_config",
+]

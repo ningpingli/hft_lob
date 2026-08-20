@@ -6,4 +6,4 @@ from hft_lob.main import main
 
 __version__ = "0.1.0"
 
-__all__ = ["main"]
+__all__ = ["__version__", "main"]

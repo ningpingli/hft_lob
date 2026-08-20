@@ -117,17 +117,16 @@ class ModelConfig:
 
     name: str = "cnn1"
     output_dim: int = 1
-    hidden_dim: int = 64  # MLP 使用
-    dropout: float = 0.1  # MLP 使用
 
 
 @dataclass(frozen=True)
 class BaselineConfig:
     """MVP 基线（§17）：Zero / Imbalance / Ridge / 轻量 MLP。"""
 
-    statistical_names: tuple[str, ...] = ("zero", "imbalance", "ridge")
-    neural_names: tuple[str, ...] = ("mlp",)
+    names: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
     ridge_alpha: float = 1.0
+    mlp_hidden_dim: int = 64
+    mlp_dropout: float = 0.1
 
 
 @dataclass(frozen=True)
