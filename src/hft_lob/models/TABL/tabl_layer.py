@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class TABL_layer(pl.LightningModule):
+class TABL_layer(nn.Module):
     """TABL_layer：软注意力加权的时间依赖建模层。"""
 
     def __init__(self, d2: int, d1: int, t1: int, t2: int) -> None:

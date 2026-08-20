@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class BiN(pl.LightningModule):
+class BiN(nn.Module):
     """BiN：时间维与特征维归一化后按可学习权重混合的归一化层。"""
 
     def __init__(self, d2: int, d1: int, t1: int, t2: int) -> None:

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class CNN2(pl.LightningModule):
+class CNN2(nn.Module):
     """CNN2：五层卷积（含 BatchNorm/PReLU）+ 全连接回归模型。"""
 
     def __init__(

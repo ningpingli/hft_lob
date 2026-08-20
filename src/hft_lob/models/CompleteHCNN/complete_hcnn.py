@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class Complete_HCNN(pl.LightningModule):
+class Complete_HCNN(nn.Module):
     """Complete_HCNN：对同调结构分别卷积后经 LSTM 读出的回归模型。"""
 
     def __init__(

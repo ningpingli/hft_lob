@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
 from torch import nn
 
@@ -38,7 +37,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         raise NotImplementedError("SinusoidalPositionalEmbedding.forward not implemented")
 
 
-class Transformer(pl.LightningModule):
+class Transformer(nn.Module):
     """Transformer：嵌入 + 正弦位置编码 + Transformer 编码器回归模型。"""
 
     def __init__(

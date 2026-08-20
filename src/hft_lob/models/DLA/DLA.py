@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class DLA(pl.LightningModule):
+class DLA(nn.Module):
     """DLA：双重注意力加权 + 双层 GRU 的回归模型。"""
 
     def __init__(

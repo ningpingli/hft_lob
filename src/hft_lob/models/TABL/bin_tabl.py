@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class BiN_BTABL(pl.LightningModule):
+class BiN_BTABL(nn.Module):
     """BiN_BTABL：BiN + BL 层 + TABL 层的 B(TABL) 架构。"""
 
     def __init__(self, d2: int, d1: int, t1: int, t2: int, d3: int, t3: int) -> None:
@@ -34,7 +34,7 @@ class BiN_BTABL(pl.LightningModule):
         raise NotImplementedError("BiN_BTABL.forward not implemented")
 
 
-class BiN_CTABL(pl.LightningModule):
+class BiN_CTABL(nn.Module):
     """BiN_CTABL：BiN + 两个 BL 层 + TABL 层的 C(TABL) 架构。"""
 
     def __init__(

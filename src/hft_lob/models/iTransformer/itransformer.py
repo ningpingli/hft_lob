@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class ITransformer(pl.LightningModule):
+class ITransformer(nn.Module):
     """ITransformer：沿特征维嵌入历史序列的倒置 Transformer 回归模型。"""
 
     def __init__(

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class CNN1(pl.LightningModule):
+class CNN1(nn.Module):
     """CNN1：双层卷积 + 池化 + 全连接回归模型。"""
 
     def __init__(

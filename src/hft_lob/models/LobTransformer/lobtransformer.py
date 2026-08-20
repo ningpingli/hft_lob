@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class LobTransformer(pl.LightningModule):
+class LobTransformer(nn.Module):
     """LobTransformer：CNN 卷积 + Inception + Transformer 编码器回归模型。"""
 
     def __init__(

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class DeepLOB(pl.LightningModule):
+class DeepLOB(nn.Module):
     """DeepLOB：卷积块 + Inception 模块 + LSTM 回归模型。"""
 
     def __init__(

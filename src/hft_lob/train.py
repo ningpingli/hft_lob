@@ -18,37 +18,7 @@ from hft_lob.systems.lob_data_module import LOBDataModule
 # ============================================================
 
 # ============================================================
-# 1. 模型工厂接口（保留，框架唯一含 if/else 的地方）
-# ============================================================
-
-def build_model(
-    model_name: str,
-    data_features: dict[str, Any],
-    model_params: dict[str, Any],
-    homological_structures: Any | None = None,
-) -> L.LightningModule:
-    """
-    根据配置构建 LightningModule（算法层）。
-
-    这是整个框架中唯一允许出现模型 if/else 分支的地方。
-
-    Args:
-        model_name: 模型名称（如 "deeplob", "transformer"）。
-        data_features: 数据契约（num_features, levels, history_length）。
-        model_params: 模型特定的超参数。
-        homological_structures: hlob 模型所需的同调结构（可选）。
-
-    Returns:
-        实例化的 LightningModule。
-
-    Raises:
-        ValueError: 不支持的模型名称。
-    """
-    raise NotImplementedError("train.build_model not implemented")
-
-
-# ============================================================
-# 2. 数据模块工厂接口（保留）
+# 1. 数据模块工厂接口（保留）
 # ============================================================
 
 def build_datamodule(
@@ -71,7 +41,7 @@ def build_datamodule(
 
 
 # ============================================================
-# 3. 回调工厂接口（保留，或移入 callbacks/ 模块）
+# 2. 回调工厂接口（保留，或移入 callbacks/ 模块）
 # ============================================================
 
 def build_checkpoint_callback(
@@ -121,7 +91,7 @@ def build_early_stopping_callback(
 
 
 # ============================================================
-# 4. 训练器构建接口（保留，编排层核心）
+# 3. 训练器构建接口（保留，编排层核心）
 # ============================================================
 
 def build_trainer(
@@ -158,7 +128,7 @@ def build_trainer(
 
 
 # ============================================================
-# 5. 执行接口（保留，编排层核心）
+# 4. 执行接口（保留，编排层核心）
 # ============================================================
 
 def run_training(

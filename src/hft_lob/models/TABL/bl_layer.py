@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import lightning.pytorch as pl
 import torch
+from torch import nn
 
 
-class BL_layer(pl.LightningModule):
+class BL_layer(nn.Module):
     """BL_layer：``ReLU(W1 @ X @ W2 + B)`` 的双线性映射层。"""
 
     def __init__(self, d2: int, d1: int, t1: int, t2: int) -> None:
