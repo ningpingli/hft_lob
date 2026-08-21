@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import uuid
@@ -17,6 +18,8 @@ from hft_lob.datasets.dataset_validator import DatasetPackageMetadata, validate_
 from hft_lob.datasets.fold_index_builder import write_fold_indexes
 from hft_lob.datasets.sample_compiler import CompiledDay, CompiledSession
 from hft_lob.preprocessing.split import WalkForwardPlan
+
+logger = logging.getLogger(__name__)
 
 
 class _ArrayAppender:
@@ -77,20 +80,15 @@ class DatasetPackageWriter:
             "features": _ArrayAppender(
                 self.work_root / ".features.bin", dtype=np.float32, width=feature_count
             ),
-            "targets": _ArrayAppender(
-                self.work_root / ".targets.bin", dtype=np.float32, width=1
-            ),
-            "validity": _ArrayAppender(
-                self.work_root / ".validity.bin", dtype=np.bool_, width=2
-            ),
-            "market": _ArrayAppender(
-                self.work_root / ".market.bin", dtype=np.float32, width=4
-            ),
+            "targets": _ArrayAppender(self.work_root / ".targets.bin", dtype=np.float32, width=1),
+            "validity": _ArrayAppender(self.work_root / ".validity.bin", dtype=np.bool_, width=2),
+            "market": _ArrayAppender(self.work_root / ".market.bin", dtype=np.float32, width=4),
         }
         self.row_writer: pq.ParquetWriter | None = None
         self.anchor_writer: pq.ParquetWriter | None = None
         self.trade_dates: list[str] = []
         self.quality: list[dict[str, object]] = []
+        self.anchor_count = 0
         self._finalized = False
 
     def __enter__(self) -> DatasetPackageWriter:
@@ -106,13 +104,21 @@ class DatasetPackageWriter:
         self.trade_dates.append(day.trade_date)
         self.quality.append(day.quality.to_dict())
         for session in day.sessions:
+            self.anchor_count += session.anchors.height
             self._append_session(session)
+
+    @property
+    def row_count(self) -> int:
+        return self.arrays["features"].rows
 
     def finalize_and_publish(
         self,
         metadata: DatasetPackageMetadata,
         plan: WalkForwardPlan,
     ) -> Path:
+        logger.info(
+            "dataset_build.finalize_arrays rows=%d anchors=%d", self.row_count, self.anchor_count
+        )
         self._finalize_data()
         anchors_path = self.work_root / "anchors.parquet"
         write_fold_indexes(anchors_path, self.work_root / "folds", plan)
@@ -128,7 +134,9 @@ class DatasetPackageWriter:
 
         package_root = self.build_root / metadata.dataset_id
         os.replace(self.work_root, package_root)
+        logger.info("dataset_build.validate_start dataset_id=%s", metadata.dataset_id)
         validate_dataset_package(package_root)
+        logger.info("dataset_build.validate_complete dataset_id=%s", metadata.dataset_id)
         destination = self.output_root / metadata.dataset_id
         if destination.exists():
             validate_dataset_package(destination)

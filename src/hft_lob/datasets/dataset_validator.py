@@ -17,43 +17,71 @@ import polars as pl
 PACKAGE_SCHEMA_VERSION = 2
 SUCCESS_MARKER = "_SUCCESS"
 FOLD_INDEX_COLUMNS = (
-    "global_anchor_index", "session_start_index", "anchor_index",
-    "trade_date", "session_id", "anchor_timestamp",
+    "global_anchor_index",
+    "session_start_index",
+    "anchor_index",
+    "trade_date",
+    "session_id",
+    "anchor_timestamp",
 )
 FOLD_INDEX_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
-    "global_anchor_index": pl.Int64, "session_start_index": pl.Int64,
-    "anchor_index": pl.Int64, "trade_date": pl.String, "session_id": pl.String,
+    "global_anchor_index": pl.Int64,
+    "session_start_index": pl.Int64,
+    "anchor_index": pl.Int64,
+    "trade_date": pl.String,
+    "session_id": pl.String,
     "anchor_timestamp": pl.Datetime("us"),
 }
 QUALITY_COLUMNS = (
-    "trade_date", "row_count", "missing_ratio", "duplicate_count",
-    "crossed_book_count", "one_side_missing_count", "max_gap", "p95_gap",
-    "stale_snapshot_ratio", "invalid_level_order_count",
+    "trade_date",
+    "row_count",
+    "missing_ratio",
+    "duplicate_count",
+    "crossed_book_count",
+    "one_side_missing_count",
+    "max_gap",
+    "p95_gap",
+    "stale_snapshot_ratio",
+    "invalid_level_order_count",
 )
 QUALITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
-    "trade_date": pl.String, "row_count": pl.Int64, "missing_ratio": pl.Float64,
-    "duplicate_count": pl.Int64, "crossed_book_count": pl.Int64,
-    "one_side_missing_count": pl.Int64, "max_gap": pl.Float64,
-    "p95_gap": pl.Float64, "stale_snapshot_ratio": pl.Float64,
+    "trade_date": pl.String,
+    "row_count": pl.Int64,
+    "missing_ratio": pl.Float64,
+    "duplicate_count": pl.Int64,
+    "crossed_book_count": pl.Int64,
+    "one_side_missing_count": pl.Int64,
+    "max_gap": pl.Float64,
+    "p95_gap": pl.Float64,
+    "stale_snapshot_ratio": pl.Float64,
     "invalid_level_order_count": pl.Int64,
 }
 
 
 def stable_config_hash(config: Mapping[str, Any]) -> str:
     encoded = json.dumps(
-        _canonicalize(config), sort_keys=True, separators=(",", ":"),
-        ensure_ascii=False, allow_nan=False,
+        _canonicalize(config),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def compute_dataset_id(
-    *, ticker: str, source_hash: str, processing_config_hash: str, fold_plan_hash: str,
+    *,
+    ticker: str,
+    source_hash: str,
+    processing_config_hash: str,
+    fold_plan_hash: str,
 ) -> str:
     values = {
-        "ticker": ticker, "source_hash": source_hash,
+        "ticker": ticker,
+        "source_hash": source_hash,
         "processing_config_hash": processing_config_hash,
-        "fold_plan_hash": fold_plan_hash, "schema_version": PACKAGE_SCHEMA_VERSION,
+        "fold_plan_hash": fold_plan_hash,
+        "schema_version": PACKAGE_SCHEMA_VERSION,
     }
     empty = [name for name, value in values.items() if isinstance(value, str) and not value.strip()]
     if empty:
@@ -80,8 +108,15 @@ class DatasetPackageMetadata:
 
     def __post_init__(self) -> None:
         text_fields = (
-            "dataset_id", "ticker", "target_column", "feature_dtype", "target_dtype",
-            "normalization_mode", "source_hash", "processing_config_hash", "fold_plan_hash",
+            "dataset_id",
+            "ticker",
+            "target_column",
+            "feature_dtype",
+            "target_dtype",
+            "normalization_mode",
+            "source_hash",
+            "processing_config_hash",
+            "fold_plan_hash",
         )
         empty = [name for name in text_fields if not str(getattr(self, name)).strip()]
         if empty:
@@ -95,7 +130,8 @@ class DatasetPackageMetadata:
         if self.normalization_window < 2:
             raise ValueError("normalization_window must be >= 2")
         expected = compute_dataset_id(
-            ticker=self.ticker, source_hash=self.source_hash,
+            ticker=self.ticker,
+            source_hash=self.source_hash,
             processing_config_hash=self.processing_config_hash,
             fold_plan_hash=self.fold_plan_hash,
         )
@@ -113,7 +149,9 @@ class DatasetPackageMetadata:
         missing = sorted(expected.difference(value))
         unknown = sorted(set(value).difference(expected))
         if missing or unknown:
-            raise ValueError(f"invalid dataset metadata fields: missing={missing}, unknown={unknown}")
+            raise ValueError(
+                f"invalid dataset metadata fields: missing={missing}, unknown={unknown}"
+            )
         columns = value["feature_columns"]
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
@@ -148,12 +186,14 @@ def validate_fold_index(frame: pl.DataFrame) -> None:
     if frame.null_count().select(pl.sum_horizontal(pl.all())).item() != 0:
         raise ValueError("fold index must not contain null values")
     if not frame.filter(
-        (pl.col("global_anchor_index") < 0) | (pl.col("session_start_index") < 0)
+        (pl.col("global_anchor_index") < 0)
+        | (pl.col("session_start_index") < 0)
         | (pl.col("anchor_index") < 0)
     ).is_empty():
         raise ValueError("fold indexes must be >= 0")
     if bool(frame.select(pl.col("global_anchor_index").is_duplicated().any()).item()):
         raise ValueError("fold index contains duplicate samples")
+
 
 _ROW_COLUMNS = ("global_index", "trade_date", "session_id", "timestamp")
 _ROW_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
@@ -187,7 +227,12 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
         "validity.npy": (row_count, 2),
         "market.npy": (row_count, 4),
     }
-    arrays = {"features.npy": features, "targets.npy": targets, "validity.npy": validity, "market.npy": market}
+    arrays = {
+        "features.npy": features,
+        "targets.npy": targets,
+        "validity.npy": validity,
+        "market.npy": market,
+    }
     for name, array in arrays.items():
         if array.shape != expected_shapes[name]:
             raise ValueError(f"invalid {name} shape: {array.shape}")
@@ -219,6 +264,18 @@ def open_dataset_package(package_dir: str | Path) -> DatasetPackage:
     return DatasetPackage(root=root, metadata=validate_dataset_package(root))
 
 
+def load_dataset_package(package_dir: str | Path) -> DatasetPackage:
+    """轻量打开构建阶段已验证并发布的数据包。
+
+    训练阶段只确认发布标记并读取内容寻址元数据，不重复扫描数组、rows 和 folds。
+    需要重新执行完整性审计时应显式调用 ``validate_dataset_package``。
+    """
+    root = Path(package_dir).resolve()
+    if not (root / SUCCESS_MARKER).is_file():
+        raise ValueError(f"dataset package is not published: missing {SUCCESS_MARKER}")
+    return DatasetPackage(root=root, metadata=_read_metadata(root / "dataset.json"))
+
+
 def _read_metadata(path: Path) -> DatasetPackageMetadata:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -236,7 +293,9 @@ def _validate_rows(rows: pl.DataFrame, row_count: int) -> None:
         rows.schema[name] != dtype for name, dtype in _ROW_SCHEMA.items()
     ):
         raise ValueError("rows.parquet has an invalid schema")
-    if rows.height != row_count or rows.get_column("global_index").to_list() != list(range(row_count)):
+    if rows.height != row_count or rows.get_column("global_index").to_list() != list(
+        range(row_count)
+    ):
         raise ValueError("rows.parquet must cover every global row exactly once")
 
 

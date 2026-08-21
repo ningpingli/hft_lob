@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -29,11 +33,13 @@ class TrainingResult:
 
 def run_training_application(request: TrainingRequest) -> TrainingResult:
     """执行一次完整训练应用流程。"""
+    started = time.perf_counter()
+    logger.info("training.start dataset_dir=%s config=%s", request.dataset_dir, request.config_path)
     _configure_gpu(request.gpu_id)
 
     # GPU 可见设备设置完成后再导入 Torch/Lightning 依赖链。
     from hft_lob.configs import load_model_config
-    from hft_lob.datasets.dataset_validator import open_dataset_package
+    from hft_lob.datasets.dataset_validator import load_dataset_package
     from hft_lob.systems.executor import DefaultWalkForwardExecutor
     from hft_lob.systems.walk_forward import run_walk_forward
     from hft_lob.utils.checkpoint_utils import backup_experiment_config
@@ -46,7 +52,12 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
 
     provisional_id = request.experiment_id or "pending"
     config = load_model_config(request.config_path, experiment_id=provisional_id)
-    package = open_dataset_package(request.dataset_dir)
+    package = load_dataset_package(request.dataset_dir)
+    logger.info(
+        "training.dataset_loaded dataset_id=%s ticker=%s validation=skipped",
+        package.metadata.dataset_id,
+        package.metadata.ticker,
+    )
     experiment_id = resolve_experiment_id(
         model_name=config.model.name,
         ticker=package.metadata.ticker,
@@ -61,6 +72,14 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
     log_dir = Path(resolve_log_dir(experiment_id))
     log_dir.mkdir(parents=True, exist_ok=True)
     backup_experiment_config(str(log_dir), asdict(config))
+    logger.info(
+        "training.experiment_ready experiment_id=%s model=%s folds_start=%d folds_count=%s seed=%d",
+        experiment_id,
+        config.model.name,
+        config.folds.start_fold,
+        config.folds.num_folds,
+        config.seed,
+    )
 
     report = run_walk_forward(
         package,
@@ -75,6 +94,13 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
             "result_count": len(report.fold_results),
             "summary": report.summary,
         },
+    )
+    logger.info(
+        "training.complete experiment_id=%s dataset_id=%s results=%d elapsed_seconds=%.3f",
+        experiment_id,
+        report.dataset_version,
+        len(report.fold_results),
+        time.perf_counter() - started,
     )
     return TrainingResult(
         experiment_id=experiment_id,

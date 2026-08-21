@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,17 +18,47 @@ from hft_lob.datasets.package_writer import DatasetPackageWriter
 from hft_lob.datasets.sample_compiler import SampleCompiler, SourceSet, discover_sources
 from hft_lob.preprocessing.split import WalkForwardPlan
 
+logger = logging.getLogger(__name__)
+
 
 def build_dataset_package(config: DataBuildConfig, output_root: str | Path) -> Path:
     """从 immutable raw 构建并原子发布一个内容寻址数据包。"""
+    started = time.perf_counter()
+    logger.info("dataset_build.start ticker=%s output_root=%s", config.ticker, output_root)
+    logger.info("dataset_build.discover_sources_start raw_dir=%s", config.data.raw_dir)
     sources = discover_sources(config)
+    logger.info(
+        "dataset_build.sources_ready files=%d source_version=%s",
+        len(sources.files),
+        sources.version,
+    )
     compiler = SampleCompiler(config)
     with DatasetPackageWriter(output_root, len(compiler.feature_columns)) as writer:
-        for day in compiler.compile(sources.files):
+        for index, day in enumerate(compiler.compile(sources.files), start=1):
             writer.append(day)
+            if index == 1 or index % 50 == 0 or index == len(sources.files):
+                logger.info(
+                    "dataset_build.progress files=%d/%d trade_date=%s rows=%d anchors=%d",
+                    index,
+                    len(sources.files),
+                    day.trade_date,
+                    writer.row_count,
+                    writer.anchor_count,
+                )
         plan = build_fold_plan(tuple(writer.trade_dates), config, sources.version)
+        logger.info("dataset_build.fold_plan_ready folds=%d", len(plan.folds))
         metadata = _metadata(config, sources, plan, compiler.feature_columns)
-        return writer.finalize_and_publish(metadata, plan)
+        package = writer.finalize_and_publish(metadata, plan)
+        logger.info(
+            "dataset_build.complete dataset_id=%s path=%s rows=%d anchors=%d folds=%d elapsed_seconds=%.3f",
+            metadata.dataset_id,
+            package,
+            writer.row_count,
+            writer.anchor_count,
+            len(plan.folds),
+            time.perf_counter() - started,
+        )
+        return package
 
 
 def _metadata(

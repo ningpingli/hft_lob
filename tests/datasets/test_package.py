@@ -12,6 +12,7 @@ from hft_lob.datasets.dataset_validator import (
     FOLD_INDEX_SCHEMA,
     DatasetPackageMetadata,
     compute_dataset_id,
+    load_dataset_package,
     validate_dataset_package,
 )
 
@@ -117,6 +118,16 @@ def test_validation_rejects_unpublished_or_missing_array(tmp_path: Path) -> None
     (root / "features.npy").unlink()
     with pytest.raises(FileNotFoundError):
         validate_dataset_package(root)
+
+
+def test_lightweight_loader_does_not_repeat_full_validation(tmp_path: Path) -> None:
+    root = _write_package(tmp_path)
+    (root / "features.npy").unlink()
+
+    package = load_dataset_package(root)
+
+    assert package.root == root.resolve()
+    assert package.metadata == _metadata()
 
 
 def test_metadata_rejects_identity_mismatch() -> None:

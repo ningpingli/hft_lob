@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +15,8 @@ from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig
 from hft_lob.datasets.dataset_validator import DatasetPackage
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
 from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -85,10 +89,20 @@ def run_walk_forward(
     metadata = package.metadata
     fold_indices = _select_package_folds(root, config.folds)
     candidates = _candidate_names(config)
+    logger.info(
+        "walk_forward.start dataset_id=%s folds=%s candidates=%s",
+        metadata.dataset_id,
+        fold_indices,
+        candidates,
+    )
 
     results: list[FoldResult] = []
     for fold_index in fold_indices:
         for candidate_name in candidates:
+            candidate_started = time.perf_counter()
+            logger.info(
+                "walk_forward.candidate_start fold=%d candidate=%s", fold_index, candidate_name
+            )
             run = executor.run_candidate(
                 package=package,
                 config=config,
@@ -121,6 +135,13 @@ def run_walk_forward(
                     evaluation=evaluation,
                 )
             )
+            logger.info(
+                "walk_forward.candidate_complete fold=%d candidate=%s samples=%d elapsed_seconds=%.3f",
+                fold_index,
+                candidate_name,
+                evaluation.sample_count,
+                time.perf_counter() - candidate_started,
+            )
 
     return WalkForwardReport(
         dataset_version=metadata.dataset_id,
@@ -136,9 +157,15 @@ def _select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int,
     if config.start_fold not in available:
         raise ValueError(f"walk_forward.start_fold {config.start_fold} is not in the package")
     start = available.index(config.start_fold)
-    selected = available[start:] if config.num_folds is None else available[start : start + config.num_folds]
+    selected = (
+        available[start:]
+        if config.num_folds is None
+        else available[start : start + config.num_folds]
+    )
     if config.num_folds is not None and len(selected) != config.num_folds:
-        raise ValueError(f"walk_forward.num_folds requests {config.num_folds}, only {len(selected)} available")
+        raise ValueError(
+            f"walk_forward.num_folds requests {config.num_folds}, only {len(selected)} available"
+        )
     return selected
 
 
@@ -204,11 +231,7 @@ def _summarize_results(
                 dtype=np.float64,
             )
             finite = metric_values[np.isfinite(metric_values)]
-            values[f"{metric}_mean"] = (
-                float(np.mean(finite)) if finite.size else float("nan")
-            )
-            values[f"{metric}_std"] = (
-                float(np.std(finite)) if finite.size else float("nan")
-            )
+            values[f"{metric}_mean"] = float(np.mean(finite)) if finite.size else float("nan")
+            values[f"{metric}_std"] = float(np.std(finite)) if finite.size else float("nan")
         summary[candidate_name] = values
     return summary

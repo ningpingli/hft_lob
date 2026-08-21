@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import polars as pl
+import pytest
 
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
@@ -70,7 +72,11 @@ def _write_raw_data(tmp_path: Path) -> None:
         )
 
 
-def test_build_dataset_package_is_complete_and_idempotent(tmp_path: Path) -> None:
+def test_build_dataset_package_is_complete_and_idempotent(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO)
     _write_raw_data(tmp_path)
     config = _config(tmp_path)
 
@@ -99,3 +105,7 @@ def test_build_dataset_package_is_complete_and_idempotent(tmp_path: Path) -> Non
     assert not (first / "anchors.parquet").exists()
     assert not (tmp_path / "processed").exists()
     assert not (tmp_path / "manifests").exists()
+    assert "dataset_build.start" in caplog.text
+    assert "dataset_build.progress" in caplog.text
+    assert "dataset_build.validate_complete" in caplog.text
+    assert "dataset_build.complete" in caplog.text
