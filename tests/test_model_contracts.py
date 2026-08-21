@@ -69,8 +69,7 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         history_snapshots=_HISTORY,
     )
-    # CNN1 / DeepLOB 已迁移到统一 [B,T,F]；其余模型将在后续分支迁移。
-    model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
+    model_input = sample if name in {"cnn1", "deeplob", "cnn2"} else sample.unsqueeze(1)
     out = model(model_input)
     assert out.shape == (2, 1)
 
@@ -91,7 +90,7 @@ def test_all_registered_models_have_scalar_regression_output(
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         history_snapshots=_HISTORY,
     )
-    model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
+    model_input = sample if name in {"cnn1", "deeplob", "cnn2"} else sample.unsqueeze(1)
     prediction = model(model_input)
     assert prediction.ndim == 2
     assert prediction.shape[-1] == 1
@@ -173,7 +172,7 @@ def test_contract_injections() -> None:
     [
         ("cnn1", torch.randn(2, _HISTORY, _FEATURES + 4)),
         ("deeplob", torch.randn(2, _HISTORY, _FEATURES + 4)),
-        ("cnn2", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
+        ("cnn2", torch.randn(2, _HISTORY, _FEATURES + 4)),
         ("transformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
         ("lobtransformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
         ("axiallob", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
@@ -190,3 +189,9 @@ def test_input_dimension_mismatch_raises(name: str, x: torch.Tensor) -> None:
     )
     with pytest.raises(ValueError):
         model(x)
+
+
+def test_cnn2_rejects_legacy_channel_dimension() -> None:
+    model = CNN2(num_features=_FEATURES, history_length=_HISTORY)
+    with pytest.raises(ValueError, match=r"expects \[B, T, F\]"):
+        model(torch.randn(2, 1, _HISTORY, _FEATURES))
