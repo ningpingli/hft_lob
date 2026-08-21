@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
+from hft_lob.application import TrainingResult
 from hft_lob.main import main, parse_args
 
 
@@ -27,7 +26,6 @@ def test_parse_training_cli_requires_dataset() -> None:
     )
 
     assert args.dataset_dir == "data/prebuilt/dataset-id"
-    assert args.stages == ["walk-forward"]
     assert args.seed == 7
     assert args.gpu_id == 2
 
@@ -47,32 +45,22 @@ def test_main_passes_dataset_directly_to_training(
     dataset_dir = tmp_path / "immutable-dataset"
     seen: dict[str, object] = {}
 
-    def fake_run(dataset, loaded_config, *, executor):  # type: ignore[no-untyped-def]
-        seen["dataset"] = dataset
-        return SimpleNamespace(dataset_version="dataset-id", fold_results=(), summary={})
+    def fake_run(request):  # type: ignore[no-untyped-def]
+        seen["request"] = request
+        return TrainingResult("cli-training", "dataset-id", 1)
 
-    monkeypatch.chdir(tmp_path)
     main_module = importlib.import_module("hft_lob.main")
-    monkeypatch.setattr(main_module, "run_walk_forward", fake_run)
-    monkeypatch.setattr(
-        main_module,
-        "open_dataset_package",
-        lambda path: SimpleNamespace(metadata=SimpleNamespace(ticker="TEST")),
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
+    monkeypatch.setattr(main_module, "run_training_application", fake_run)
+    main(
         [
-            "hft_lob",
             "--config",
             str(config),
             "--dataset-dir",
             str(dataset_dir),
             "--experiment-id",
             "cli-training",
-        ],
+        ]
     )
-
-    main()
-
-    assert seen["dataset"].metadata.ticker == "TEST"  # type: ignore[union-attr]
+    request = seen["request"]
+    assert request.dataset_dir == str(dataset_dir)  # type: ignore[union-attr]
+    assert request.experiment_id == "cli-training"  # type: ignore[union-attr]
