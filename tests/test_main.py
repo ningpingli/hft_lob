@@ -56,8 +56,8 @@ def test_main_passes_dataset_directly_to_training(
     monkeypatch.setattr(main_module, "run_walk_forward", fake_run)
     monkeypatch.setattr(
         main_module,
-        "validate_dataset_package",
-        lambda path: SimpleNamespace(ticker="TEST"),
+        "open_dataset_package",
+        lambda path: SimpleNamespace(metadata=SimpleNamespace(ticker="TEST")),
     )
     monkeypatch.setattr(
         sys,
@@ -75,4 +75,4 @@ def test_main_passes_dataset_directly_to_training(
 
     main()
 
-    assert seen["dataset"] == str(dataset_dir)
+    assert seen["dataset"].metadata.ticker == "TEST"  # type: ignore[union-attr]

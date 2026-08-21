@@ -10,26 +10,22 @@ import torch
 
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
-    BaselineConfig,
     CleaningConfig,
+    DataBuildConfig,
     DataConfig,
-    EvaluationConfig,
-    ExperimentConfig,
     FeatureConfig,
     LoaderConfig,
-    ModelConfig,
     NormalizationConfig,
     SessionConfig,
     SplitConfig,
     TargetConfig,
     TaskConfig,
-    TrainingConfig,
     WalkForwardConfig,
     WindowConfig,
 )
 from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
-from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.datasets.validation import open_dataset_package, validate_dataset_package
 from hft_lob.systems.lob_data_module import LOBDataModule, _seed_worker
 from hft_lob.utils.seed import set_seed
 
@@ -55,9 +51,8 @@ def _raw_row(timestamp: datetime, *, step: int, day: int) -> dict[str, object]:
     return row
 
 
-def _config(tmp_path: Path) -> ExperimentConfig:
-    return ExperimentConfig(
-        experiment_id="seed-integration",
+def _config(tmp_path: Path) -> DataBuildConfig:
+    return DataBuildConfig(
         task=TaskConfig(ticker="TEST"),
         data=DataConfig(
             raw_dir=str(tmp_path / "raw"),
@@ -70,11 +65,6 @@ def _config(tmp_path: Path) -> ExperimentConfig:
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(use_derived=False),
         normalization=NormalizationConfig(normalize_window=2),
-        loader=LoaderConfig(batch_size=4, num_workers=0),
-        model=ModelConfig(),
-        baselines=BaselineConfig(),
-        training=TrainingConfig(),
-        evaluation=EvaluationConfig(),
         split=SplitConfig(),
         walk_forward=WalkForwardConfig(
             train_window_days=2,
@@ -82,14 +72,16 @@ def _config(tmp_path: Path) -> ExperimentConfig:
             test_window_days=1,
             step_days=1,
         ),
-        seed=31415,
     )
 
 
-def _load_once(config: ExperimentConfig, dataset_dir: Path) -> tuple[torch.Tensor, tuple[str, ...]]:
+def _load_once(config: DataBuildConfig, dataset_dir: Path) -> tuple[torch.Tensor, tuple[str, ...]]:
     metadata = validate_dataset_package(dataset_dir)
     module = LOBDataModule(
-        dataset_dir, fold_index=1, loader=config.loader, seed=config.seed
+        open_dataset_package(dataset_dir),
+        fold_index=1,
+        loader=LoaderConfig(batch_size=4),
+        seed=31415,
     )
     dataset = RandomizedPrebuiltDataset(
         dataset_dir,
@@ -121,9 +113,9 @@ def test_virtual_raw_lob_pipeline_and_loader_are_reproducible(
     config = _config(tmp_path)
     dataset_dir = build_dataset_package(config, tmp_path / "prebuilt")
 
-    set_seed(config.seed)
+    set_seed(31415)
     first_features, first_anchors = _load_once(config, dataset_dir)
-    set_seed(config.seed)
+    set_seed(31415)
     second_features, second_anchors = _load_once(config, dataset_dir)
 
     assert first_anchors == second_anchors

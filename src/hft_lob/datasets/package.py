@@ -7,7 +7,7 @@ from pathlib import Path
 
 import polars as pl
 
-from hft_lob.preprocessing.manifest import stable_config_hash
+from hft_lob.datasets.identity import stable_config_hash
 
 PACKAGE_SCHEMA_VERSION = 2
 SUCCESS_MARKER = "_SUCCESS"
@@ -127,6 +127,20 @@ class DatasetPackageMetadata:
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
         return cls(**{**value, "feature_columns": tuple(columns)})  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True)
+class DatasetPackage:
+    """已完整校验、可由训练各层共享的只读数据包句柄。"""
+
+    root: Path
+    metadata: DatasetPackageMetadata
+
+    def __post_init__(self) -> None:
+        resolved = self.root.resolve()
+        if resolved.name != self.metadata.dataset_id:
+            raise ValueError("package root name must equal dataset_id")
+        object.__setattr__(self, "root", resolved)
 
 
 def fold_index_path(package_dir: str | Path, fold_index: int, split: str) -> Path:

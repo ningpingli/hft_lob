@@ -7,7 +7,6 @@ import yaml
 
 from hft_lob.utils import experiment_manager
 from hft_lob.utils.experiment_manager import (
-    extract_exp_id_from_ckpt,
     generate_experiment_id,
     resolve_experiment_id,
     resolve_log_dir,
@@ -27,19 +26,6 @@ def test_generate_experiment_id_creates_result_directory(
     assert (tmp_path / experiment_id).is_dir()
 
 
-@pytest.mark.parametrize(
-    ("path", "expected"),
-    [
-        ("loggers/results/run-123/model.ckpt", "run-123"),
-        (r"C:\project\loggers\results\run-456\best.ckpt", "run-456"),
-        ("prefix/loggers/results/run-789", "run-789"),
-        ("results/run-123/model.ckpt", None),
-    ],
-)
-def test_extract_exp_id_from_ckpt(path: str, expected: str | None) -> None:
-    assert extract_exp_id_from_ckpt(path) == expected
-
-
 def test_resolve_experiment_id_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         experiment_manager, "generate_experiment_id", lambda model_name, ticker: "generated"
@@ -50,26 +36,10 @@ def test_resolve_experiment_id_precedence(monkeypatch: pytest.MonkeyPatch) -> No
             model_name="model",
             ticker="TEST",
             override_id="override",
-            resume_ckpt="loggers/results/resumed/model.ckpt",
         )
         == "override"
     )
-    assert (
-        resolve_experiment_id(
-            model_name="model",
-            ticker="TEST",
-            resume_ckpt="loggers/results/resumed/model.ckpt",
-        )
-        == "resumed"
-    )
     assert resolve_experiment_id(model_name="model", ticker="TEST") == "generated"
-
-
-def test_resolve_experiment_id_rejects_unusable_resume_path() -> None:
-    with pytest.raises(ValueError, match="loggers/results"):
-        resolve_experiment_id(
-            model_name="model", ticker="TEST", resume_ckpt="checkpoints/model.ckpt"
-        )
 
 
 def test_resolve_log_dir_rejects_path_traversal() -> None:

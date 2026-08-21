@@ -8,7 +8,12 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from hft_lob.datasets.package import SUCCESS_MARKER, DatasetPackageMetadata, validate_fold_index
+from hft_lob.datasets.package import (
+    SUCCESS_MARKER,
+    DatasetPackage,
+    DatasetPackageMetadata,
+    validate_fold_index,
+)
 
 _ROW_COLUMNS = ("global_index", "trade_date", "session_id", "timestamp")
 _ROW_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
@@ -65,6 +70,12 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
             validate_fold_index(frame)
             _validate_fold_references(frame, rows, validity, row_count, metadata.history_snapshots)
     return metadata
+
+
+def open_dataset_package(package_dir: str | Path) -> DatasetPackage:
+    """完整校验一次并返回供训练阶段共享的只读句柄。"""
+    root = Path(package_dir).resolve()
+    return DatasetPackage(root=root, metadata=validate_dataset_package(root))
 
 
 def _read_metadata(path: Path) -> DatasetPackageMetadata:

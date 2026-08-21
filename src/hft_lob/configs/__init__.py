@@ -7,7 +7,6 @@ from hft_lob.configs.experiment import (
     DataBuildConfig,
     DataConfig,
     EvaluationConfig,
-    ExperimentConfig,
     FeatureConfig,
     FoldSelectionConfig,
     LoaderConfig,
@@ -22,7 +21,7 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.configs.loader import load_config, load_data_config, load_model_config
+from hft_lob.configs.loader import load_data_config, load_model_config
 
 __all__ = [
     "RAW_FEATURE_COLUMNS",
@@ -31,7 +30,6 @@ __all__ = [
     "DataConfig",
     "EvaluationConfig",
     "DataBuildConfig",
-    "ExperimentConfig",
     "FeatureConfig",
     "FoldSelectionConfig",
     "LoaderConfig",
@@ -45,7 +43,6 @@ __all__ = [
     "TrainingConfig",
     "WalkForwardConfig",
     "WindowConfig",
-    "load_config",
     "load_data_config",
     "load_model_config",
 ]

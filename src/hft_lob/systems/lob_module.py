@@ -36,7 +36,6 @@ class LOBLightningModule(L.LightningModule):
         dataset_version: str | None = None,
         model_version: str = "unknown",
         fold_index: int | None = None,
-        prediction_split: str = "test",
     ) -> None:
         """初始化 LightningModule。
 
@@ -46,17 +45,15 @@ class LOBLightningModule(L.LightningModule):
             dataset_version: 数据集版本标识（§31）。
             model_version: 模型版本标识（§29）。
             fold_index: 当前 walk-forward fold 编号；生成 artifact 时必须提供。
-            prediction_split: ``predict_step`` 生成 artifact 所属 split。
         """
         super().__init__()
-        # 不把 ExperimentConfig dataclass pickle 进 checkpoint；PyTorch 2.6 的
+        # 不把 ModelRunConfig dataclass pickle 进 checkpoint；PyTorch 2.6 的
         # weights_only 安全加载只接受张量和基础类型。配置已由实验目录单独备份。
         self.save_hyperparameters(
             {
                 "dataset_version": dataset_version,
                 "model_version": model_version,
                 "fold_index": fold_index,
-                "prediction_split": prediction_split,
             }
         )
         self.model = model
@@ -64,7 +61,6 @@ class LOBLightningModule(L.LightningModule):
         self.dataset_version = dataset_version
         self.model_version = model_version
         self.fold_index = fold_index
-        self.prediction_split = prediction_split
         self.loss_fn = build_loss(
             config.training.loss,
             huber_delta=config.training.loss_huber_delta,
@@ -75,10 +71,6 @@ class LOBLightningModule(L.LightningModule):
         self._test_targets: list[torch.Tensor] = []
         self._test_metadata: list[SampleMeta] = []
         self.test_artifact: PredictionArtifact | None = None
-        self._predict_predictions: list[torch.Tensor] = []
-        self._predict_targets: list[torch.Tensor] = []
-        self._predict_metadata: list[SampleMeta] = []
-        self.prediction_artifact: PredictionArtifact | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向：委托内部模型（§18 契约）。"""
@@ -137,23 +129,6 @@ class LOBLightningModule(L.LightningModule):
         )
         return loss
 
-    def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
-        """测试步：累积 preds/targets/meta（供 artifact 与日级指标，§28）。"""
-        predictions, targets = self._shared_step(batch)
-        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
-        self._test_predictions.append(predictions.detach().cpu())
-        self._test_targets.append(targets.detach().cpu())
-        self._test_metadata.extend(batch.metadata)
-        self.log(
-            "test/loss",
-            loss,
-            on_step=False,
-            on_epoch=True,
-            batch_size=targets.shape[0],
-            sync_dist=True,
-        )
-        return loss
-
     def on_validation_epoch_end(self) -> None:
         """验证期结束：整 epoch 计算指标，并以 ``val/<metric>`` 记录。
 
@@ -178,11 +153,25 @@ class LOBLightningModule(L.LightningModule):
         self._validation_predictions.clear()
         self._validation_targets.clear()
 
+    def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
+        """测试步：记录 loss，并累积生成统一 artifact 所需的数据。"""
+        predictions, targets = self._shared_step(batch)
+        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        self._test_predictions.append(predictions.detach().cpu())
+        self._test_targets.append(targets.detach().cpu())
+        self._test_metadata.extend(batch.metadata)
+        self.log("test/loss", loss, batch_size=targets.shape[0], sync_dist=True)
+        return loss
+
+    def on_test_epoch_start(self) -> None:
+        self._test_predictions.clear()
+        self._test_targets.clear()
+        self._test_metadata.clear()
+        self.test_artifact = None
+
     def on_test_epoch_end(self) -> None:
-        """测试期结束：只汇集预测记录；评估与落盘由外部统一处理。"""
         if not self._test_predictions:
-            self.test_artifact = None
-            return
+            raise RuntimeError("test completed without any batches")
         self.test_artifact = self._make_artifact(
             predictions=torch.cat(self._test_predictions),
             targets=torch.cat(self._test_targets),
@@ -192,35 +181,6 @@ class LOBLightningModule(L.LightningModule):
         self._test_predictions.clear()
         self._test_targets.clear()
         self._test_metadata.clear()
-
-    def predict_step(self, batch: LOBBatch, batch_idx: int) -> None:
-        """累积批级预测；epoch 结束后统一生成不可变 artifact。"""
-        predictions, targets = self._shared_step(batch)
-        self._predict_predictions.append(predictions.detach().cpu())
-        self._predict_targets.append(targets.detach().cpu())
-        self._predict_metadata.extend(batch.metadata)
-        return None
-
-    def on_predict_epoch_start(self) -> None:
-        """清除上一次 predict 调用残留。"""
-        self._predict_predictions.clear()
-        self._predict_targets.clear()
-        self._predict_metadata.clear()
-        self.prediction_artifact = None
-
-    def on_predict_epoch_end(self) -> None:
-        """将全部 batch 合并成一个 PredictionArtifact。"""
-        if not self._predict_predictions:
-            raise RuntimeError("predict completed without any batches")
-        self.prediction_artifact = self._make_artifact(
-            predictions=torch.cat(self._predict_predictions),
-            targets=torch.cat(self._predict_targets),
-            metadata=tuple(self._predict_metadata),
-            split=self.prediction_split,
-        )
-        self._predict_predictions.clear()
-        self._predict_targets.clear()
-        self._predict_metadata.clear()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """AdamW（参数来自 training 段；无 scheduler）。"""

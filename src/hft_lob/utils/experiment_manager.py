@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import random
-import re
 import string
 from datetime import datetime
 from pathlib import Path
@@ -20,10 +19,6 @@ from hft_lob.utils._yaml_io import atomic_dump_yaml
 
 #: 结果根目录（cwd 相对）。
 _RESULTS_ROOT = os.path.join("loggers", "results")
-
-#: 实验目录名模式：``loggers/results/<experiment_id>/...``。
-_EXP_ID_IN_PATH = re.compile(r"(?:^|[\\/])loggers[\\/]results[\\/]([^\\/]+)(?:[\\/]|$)")
-
 
 def generate_experiment_id(model_name: str, ticker: str) -> str:
     """生成新实验 ID：``<ticker>_<model>_<YYYY-MM-DD_HH_MM_SS>_<7位随机>``，
@@ -56,46 +51,22 @@ def resolve_experiment_id(
     model_name: str,
     ticker: str,
     override_id: str | None = None,
-    resume_ckpt: str | None = None,
 ) -> str:
-    """解析实验 ID：``override_id`` > 检查点路径中提取 > 新生成。
+    """解析实验 ID：显式 ID 优先，否则生成新 ID。
 
     Args:
         model_name: 模型名。
         ticker: 股票代码。
         override_id: 命令行显式指定的实验 ID。
-        resume_ckpt: 恢复训练的检查点路径（用于提取原实验 ID）。
 
     Returns:
         实验 ID。
 
-    Raises:
-        ValueError: ``resume_ckpt`` 存在但无法提取有效实验 ID。
     """
     if override_id is not None:
         _validate_path_component(override_id, field="override_id")
         return override_id
-    if resume_ckpt is not None:
-        experiment_id = extract_exp_id_from_ckpt(resume_ckpt)
-        if experiment_id is None:
-            raise ValueError(
-                "resume_ckpt must contain a loggers/results/<experiment_id>/ path segment"
-            )
-        return experiment_id
     return generate_experiment_id(model_name, ticker)
-
-
-def extract_exp_id_from_ckpt(ckpt_path: str) -> str | None:
-    """从检查点路径中提取实验 ID（路径须含 ``loggers/results/<id>/`` 段）。"""
-    match = _EXP_ID_IN_PATH.search(ckpt_path)
-    if match is None:
-        return None
-    experiment_id = match.group(1)
-    try:
-        _validate_path_component(experiment_id, field="experiment_id")
-    except ValueError:
-        return None
-    return experiment_id
 
 
 def write_experiment_log(experiment_id: str, header: str, contents: dict[str, Any]) -> None:

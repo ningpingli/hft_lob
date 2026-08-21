@@ -15,21 +15,11 @@ import torch
 
 from hft_lob.configs.experiment import (
     BaselineConfig,
-    CleaningConfig,
-    DataConfig,
     EvaluationConfig,
-    ExperimentConfig,
-    FeatureConfig,
     LoaderConfig,
     ModelConfig,
-    NormalizationConfig,
-    SessionConfig,
-    SplitConfig,
-    TargetConfig,
-    TaskConfig,
+    ModelRunConfig,
     TrainingConfig,
-    WalkForwardConfig,
-    WindowConfig,
 )
 from hft_lob.models import build_model
 from hft_lob.models.CNN1.cnn1 import CNN1
@@ -55,25 +45,14 @@ _FORWARD_NAMES = (
 )
 
 
-def _make_config(model_name: str) -> ExperimentConfig:
-    """构造最小 ExperimentConfig（仅模型契约相关字段非默认）。"""
-    return ExperimentConfig(
+def _make_config(model_name: str) -> ModelRunConfig:
+    return ModelRunConfig(
         experiment_id="test",
-        task=TaskConfig(ticker="TEST"),
-        data=DataConfig(levels=_LEVELS),
-        cleaning=CleaningConfig(),
-        target=TargetConfig(),
-        sessions=SessionConfig(),
-        window=WindowConfig(history_snapshots=_HISTORY),
-        features=FeatureConfig(),
-        normalization=NormalizationConfig(),
         loader=LoaderConfig(),
         model=ModelConfig(name=model_name),
         baselines=BaselineConfig(),
         training=TrainingConfig(),
         evaluation=EvaluationConfig(),
-        split=SplitConfig(),
-        walk_forward=WalkForwardConfig(),
     )
 
 

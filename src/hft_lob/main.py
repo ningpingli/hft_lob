@@ -10,7 +10,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from hft_lob.configs import load_model_config
-from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.datasets.validation import open_dataset_package
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 from hft_lob.utils.checkpoint_utils import backup_experiment_config
@@ -34,7 +34,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", default="configs/model.yaml")
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--experiment-id")
-    parser.add_argument("--resume-ckpt")
     parser.add_argument(
         "--stages",
         nargs="+",
@@ -76,12 +75,11 @@ def main() -> None:
 
     provisional_id = args.experiment_id or "pending"
     config = load_model_config(args.config, experiment_id=provisional_id)
-    dataset_metadata = validate_dataset_package(args.dataset_dir)
+    package = open_dataset_package(args.dataset_dir)
     experiment_id = resolve_experiment_id(
         model_name=config.model.name,
-        ticker=dataset_metadata.ticker,
+        ticker=package.metadata.ticker,
         override_id=args.experiment_id,
-        resume_ckpt=args.resume_ckpt,
     )
     config = replace(
         config,
@@ -96,7 +94,7 @@ def main() -> None:
     for stage in args.stages:
         if stage == "walk-forward":
             report = run_walk_forward(
-                args.dataset_dir,
+                package,
                 config,
                 executor=DefaultWalkForwardExecutor(str(log_dir / "walk_forward")),
             )

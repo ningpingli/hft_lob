@@ -2,12 +2,13 @@
 
 from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.datasets.contracts import LOBBatch, SampleMeta
-from hft_lob.datasets.package import DatasetPackageMetadata, compute_dataset_id
+from hft_lob.datasets.package import DatasetPackage, DatasetPackageMetadata, compute_dataset_id
 from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
 from hft_lob.datasets.validation import validate_dataset_package
 
 __all__ = [
     "DatasetPackageMetadata",
+    "DatasetPackage",
     "LOBBatch",
     "PrebuiltLOBDataset",
     "SampleMeta",

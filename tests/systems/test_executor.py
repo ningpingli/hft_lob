@@ -9,12 +9,14 @@ from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
     BaselineConfig,
     CleaningConfig,
+    DataBuildConfig,
     DataConfig,
     EvaluationConfig,
-    ExperimentConfig,
     FeatureConfig,
+    FoldSelectionConfig,
     LoaderConfig,
     ModelConfig,
+    ModelRunConfig,
     NormalizationConfig,
     SessionConfig,
     SplitConfig,
@@ -25,20 +27,21 @@ from hft_lob.configs.experiment import (
     WindowConfig,
 )
 from hft_lob.datasets.builder import build_dataset_package
+from hft_lob.datasets.validation import open_dataset_package
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 
 
 def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Path) -> None:
     dates = ["2026-01-05", "2026-01-06", "2026-01-07"]
-    config = _config(tmp_path)
+    data_config, model_config = _configs(tmp_path)
     for day, date in enumerate(dates):
         _write_raw(tmp_path, date, day)
-    dataset_dir = build_dataset_package(config, tmp_path / "prebuilt")
+    dataset_dir = build_dataset_package(data_config, tmp_path / "prebuilt")
 
     report = run_walk_forward(
-        dataset_dir,
-        config,
+        open_dataset_package(dataset_dir),
+        model_config,
         executor=DefaultWalkForwardExecutor(
             str(tmp_path / "results"), accelerator="cpu"
         ),
@@ -51,9 +54,8 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     assert result.evaluation.sample_count > 0
 
 
-def _config(tmp_path: Path) -> ExperimentConfig:
-    return ExperimentConfig(
-        experiment_id="executor-smoke",
+def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
+    data_config = DataBuildConfig(
         task=TaskConfig(ticker="TEST"),
         data=DataConfig(
             raw_dir=str(tmp_path / "raw"),
@@ -66,6 +68,16 @@ def _config(tmp_path: Path) -> ExperimentConfig:
         window=WindowConfig(history_snapshots=8),
         features=FeatureConfig(),
         normalization=NormalizationConfig(normalize_window=2),
+        split=SplitConfig(),
+        walk_forward=WalkForwardConfig(
+            train_window_days=1,
+            validation_window_days=1,
+            test_window_days=1,
+            step_days=1,
+        ),
+    )
+    model_config = ModelRunConfig(
+        experiment_id="executor-smoke",
         loader=LoaderConfig(batch_size=8),
         model=ModelConfig(name="cnn1"),
         baselines=BaselineConfig(names=()),
@@ -76,15 +88,10 @@ def _config(tmp_path: Path) -> ExperimentConfig:
             bootstrap_samples=2,
             bootstrap_block_size=2,
         ),
-        split=SplitConfig(),
-        walk_forward=WalkForwardConfig(
-            train_window_days=1,
-            validation_window_days=1,
-            test_window_days=1,
-            step_days=1,
-        ),
+        folds=FoldSelectionConfig(),
         seed=7,
     )
+    return data_config, model_config
 
 
 def _write_raw(tmp_path: Path, trade_date: str, day_offset: int) -> None:

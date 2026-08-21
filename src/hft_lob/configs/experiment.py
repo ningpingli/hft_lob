@@ -1,4 +1,4 @@
-"""ExperimentConfig：单股 LOB 60 秒收益预测系统的实验配置 dataclass 组。
+"""数据构建与模型训练相互独立的配置 dataclass 组。
 
 按 ``doc/需求文档.md`` §42 冻结的核心规格组织：task / data / target / sessions /
 window / features / normalization / loader / model / training / evaluation / split。
@@ -273,53 +273,3 @@ class ModelRunConfig:
     seed: int = 42
 
 
-@dataclass(frozen=True)
-class ExperimentConfig:
-    """整个实验的配置根（§42 冻结规格）。"""
-
-    experiment_id: str
-    task: TaskConfig
-    data: DataConfig
-    cleaning: CleaningConfig
-    target: TargetConfig
-    sessions: SessionConfig
-    window: WindowConfig
-    features: FeatureConfig
-    normalization: NormalizationConfig
-    loader: LoaderConfig
-    model: ModelConfig
-    baselines: BaselineConfig
-    training: TrainingConfig
-    evaluation: EvaluationConfig
-    split: SplitConfig
-    walk_forward: WalkForwardConfig
-    seed: int = 42
-
-    @property
-    def ticker(self) -> str:
-        """便捷访问：任务股票代码。"""
-        return self.task.ticker
-
-    @property
-    def model_name(self) -> str:
-        """便捷访问：模型名。"""
-        return self.model.name
-
-    @property
-    def nominal_history_seconds(self) -> int:
-        """名义窗口时长，由快照数和配置采样周期共同推导。"""
-        return self.window.history_snapshots * self.data.snapshot_interval_seconds
-
-    @property
-    def target_column(self) -> str:
-        """主标签列名（§7.1：唯一 primary target）。"""
-        short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
-        return f"Target_{self.target.horizon_seconds}s_{short}"
-
-    @property
-    def folds(self) -> FoldSelectionConfig:
-        """旧聚合配置到新训练 fold 选择契约的兼容视图。"""
-        return FoldSelectionConfig(
-            start_fold=self.walk_forward.start_fold,
-            num_folds=self.walk_forward.num_folds,
-        )

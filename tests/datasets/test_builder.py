@@ -8,32 +8,27 @@ import polars as pl
 
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
-    BaselineConfig,
     CleaningConfig,
+    DataBuildConfig,
     DataConfig,
-    EvaluationConfig,
-    ExperimentConfig,
     FeatureConfig,
     LoaderConfig,
-    ModelConfig,
     NormalizationConfig,
     SessionConfig,
     SplitConfig,
     TargetConfig,
     TaskConfig,
-    TrainingConfig,
     WalkForwardConfig,
     WindowConfig,
 )
 from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
-from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.datasets.validation import open_dataset_package, validate_dataset_package
 from hft_lob.systems.lob_data_module import LOBDataModule
 
 
-def _config(tmp_path: Path) -> ExperimentConfig:
-    return ExperimentConfig(
-        experiment_id="builder-test",
+def _config(tmp_path: Path) -> DataBuildConfig:
+    return DataBuildConfig(
         task=TaskConfig(ticker="TEST"),
         data=DataConfig(
             raw_dir=str(tmp_path / "raw"),
@@ -46,11 +41,6 @@ def _config(tmp_path: Path) -> ExperimentConfig:
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(),
         normalization=NormalizationConfig(normalize_window=2),
-        loader=LoaderConfig(),
-        model=ModelConfig(),
-        baselines=BaselineConfig(),
-        training=TrainingConfig(),
-        evaluation=EvaluationConfig(),
         split=SplitConfig(),
         walk_forward=WalkForwardConfig(
             train_window_days=2,
@@ -102,7 +92,9 @@ def test_build_dataset_package_is_complete_and_idempotent(tmp_path: Path) -> Non
     assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
     assert target.shape == (1,)
     assert sample.ticker == "TEST"
-    module = LOBDataModule(first, fold_index=1, loader=config.loader, seed=config.seed)
+    module = LOBDataModule(
+        open_dataset_package(first), fold_index=1, loader=LoaderConfig(), seed=42
+    )
     module.setup("fit")
     assert next(iter(module.train_dataloader())).features.ndim == 3
     assert not any(path.name.startswith(".") for path in (tmp_path / "prebuilt").iterdir())

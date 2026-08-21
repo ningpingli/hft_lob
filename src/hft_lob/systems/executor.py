@@ -11,7 +11,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.datasets.contracts import LOBBatch
-from hft_lob.datasets.package import DatasetPackageMetadata
+from hft_lob.datasets.package import DatasetPackage, DatasetPackageMetadata
 from hft_lob.models import build_model
 from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.lob_data_module import LOBDataModule
@@ -21,7 +21,7 @@ from hft_lob.train import (
     build_checkpoint_callback,
     build_early_stopping_callback,
     build_trainer,
-    run_predict,
+    run_test,
     run_training,
 )
 
@@ -37,12 +37,12 @@ class DefaultWalkForwardExecutor:
     def run_candidate(
         self,
         *,
-        dataset_dir: str,
-        metadata: DatasetPackageMetadata,
+        package: DatasetPackage,
         config: ModelRunConfig,
         fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
+        metadata = package.metadata
         output_dir = (
             Path(self.output_root)
             / f"fold_{fold_index:03d}"
@@ -50,14 +50,14 @@ class DefaultWalkForwardExecutor:
         )
         output_dir.mkdir(parents=True, exist_ok=True)
         datamodule = LOBDataModule(
-            dataset_dir,
+            package,
             fold_index=fold_index,
             loader=config.loader,
             seed=config.seed,
         )
         predictions_path = str((output_dir / "predictions.parquet").resolve())
         model_version = f"{config.experiment_id}-fold{fold_index}-{candidate_name}"
-        state_path = str((Path(dataset_dir) / "dataset.json").resolve())
+        state_path = str((package.root / "dataset.json").resolve())
 
         if candidate_name in BASELINE_NAMES:
             artifact = self._run_baseline(
@@ -114,12 +114,11 @@ class DefaultWalkForwardExecutor:
             raise RuntimeError(
                 f"training completed without a best checkpoint for {candidate_name} fold {fold_index}"
             )
-        artifact = run_predict(
+        artifact = run_test(
             trainer,
             lightning_module,
             datamodule,
             checkpoint_path,
-            split="test",
         )
         return CandidateFoldRun(
             artifact=artifact,
@@ -157,10 +156,10 @@ class DefaultWalkForwardExecutor:
             )
         )
         datamodule.teardown("fit")
-        datamodule.setup("predict")
+        datamodule.setup("test")
         artifact = runner.predict(
-            (cast(LOBBatch, batch) for batch in datamodule.predict_dataloader()),
+            (cast(LOBBatch, batch) for batch in datamodule.test_dataloader()),
             split="test",
         )
-        datamodule.teardown("predict")
+        datamodule.teardown("test")
         return artifact

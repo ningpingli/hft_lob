@@ -8,21 +8,11 @@ from torch import nn
 
 from hft_lob.configs.experiment import (
     BaselineConfig,
-    CleaningConfig,
-    DataConfig,
     EvaluationConfig,
-    ExperimentConfig,
-    FeatureConfig,
     LoaderConfig,
     ModelConfig,
-    NormalizationConfig,
-    SessionConfig,
-    SplitConfig,
-    TargetConfig,
-    TaskConfig,
+    ModelRunConfig,
     TrainingConfig,
-    WalkForwardConfig,
-    WindowConfig,
 )
 from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.lob_module import LOBLightningModule
@@ -37,17 +27,9 @@ class MeanModel(nn.Module):
         return self.output(x.mean(dim=1))
 
 
-def _config() -> ExperimentConfig:
-    return ExperimentConfig(
+def _config() -> ModelRunConfig:
+    return ModelRunConfig(
         experiment_id="lob-module-test",
-        task=TaskConfig(ticker="TEST"),
-        data=DataConfig(),
-        cleaning=CleaningConfig(),
-        target=TargetConfig(),
-        sessions=SessionConfig(),
-        window=WindowConfig(history_snapshots=3),
-        features=FeatureConfig(),
-        normalization=NormalizationConfig(),
         loader=LoaderConfig(),
         model=ModelConfig(name="cnn1"),
         baselines=BaselineConfig(),
@@ -57,8 +39,6 @@ def _config() -> ExperimentConfig:
             prediction_bins=2,
             bootstrap_samples=2,
         ),
-        split=SplitConfig(),
-        walk_forward=WalkForwardConfig(),
     )
 
 
@@ -121,22 +101,18 @@ def test_validation_logs_epoch_metrics_and_clears_buffers() -> None:
     assert not module._validation_predictions
 
 
-def test_predict_and_test_use_complete_artifact_contract() -> None:
+def test_test_uses_complete_artifact_contract() -> None:
     module = _module()
     batch = _batch()
 
-    module.on_predict_epoch_start()
-    module.predict_step(batch, 0)
-    module.on_predict_epoch_end()
+    module.on_test_epoch_start()
     module.test_step(batch, 0)
     module.on_test_epoch_end()
 
-    assert module.prediction_artifact is not None
-    assert module.prediction_artifact.predictions.shape == (2,)
-    assert module.prediction_artifact.dataset_version == "dataset-v1"
-    assert module.prediction_artifact.fold_index == 1
     assert module.test_artifact is not None
-    assert module.test_artifact.metadata == batch.metadata
+    assert module.test_artifact.predictions.shape == (2,)
+    assert module.test_artifact.dataset_version == "dataset-v1"
+    assert module.test_artifact.fold_index == 1
 
 
 def test_rejects_noncanonical_model_output() -> None:

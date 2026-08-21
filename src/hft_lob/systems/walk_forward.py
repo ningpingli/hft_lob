@@ -9,10 +9,8 @@ from typing import Protocol
 
 import numpy as np
 
-from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig, WalkForwardConfig
-from hft_lob.datasets.package import DatasetPackageMetadata
-from hft_lob.datasets.validation import validate_dataset_package
-from hft_lob.preprocessing.split import Fold, WalkForwardPlan
+from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig
+from hft_lob.datasets.package import DatasetPackage
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
 from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
 
@@ -37,8 +35,7 @@ class WalkForwardExecutor(Protocol):
     def run_candidate(
         self,
         *,
-        dataset_dir: str,
-        metadata: DatasetPackageMetadata,
+        package: DatasetPackage,
         config: ModelRunConfig,
         fold_index: int,
         candidate_name: str,
@@ -69,41 +66,8 @@ class WalkForwardReport:
     summary: dict[str, dict[str, float]]
 
 
-def select_walk_forward_folds(
-    plan: WalkForwardPlan,
-    config: WalkForwardConfig,
-) -> tuple[Fold, ...]:
-    """从固定计划中选择本次要执行的连续周期，不改变任何 fold 内容。
-
-    ``start_fold`` 直接匹配计划中的一基 fold 编号；``num_folds`` 必须能完整
-    满足，避免用户要求训练3折却静默只执行剩余2折。
-    """
-    if not config.enabled:
-        return ()
-    folds = plan.folds
-    if not folds:
-        raise ValueError("walk-forward plan contains no folds")
-
-    start_index = next(
-        (index for index, fold in enumerate(folds) if fold.index == config.start_fold),
-        len(folds),
-    )
-    if start_index == len(folds):
-        raise ValueError(f"walk_forward.start_fold {config.start_fold} is not in the plan")
-
-    if config.num_folds is None:
-        return folds[start_index:]
-    end_index = start_index + config.num_folds
-    if end_index > len(folds):
-        available = len(folds) - start_index
-        raise ValueError(
-            f"walk_forward.num_folds requests {config.num_folds}, only {available} available"
-        )
-    return folds[start_index:end_index]
-
-
 def run_walk_forward(
-    dataset_dir: str | Path,
+    package: DatasetPackage,
     config: ModelRunConfig,
     *,
     executor: WalkForwardExecutor,
@@ -117,8 +81,8 @@ def run_walk_forward(
     checkpoint 和 early stopping 必须使用 ``config.training.monitor_metric`` 与
     ``config.training.monitor_mode``，不允许 runner 自行定义另一套指标名。
     """
-    root = Path(dataset_dir).resolve()
-    metadata = validate_dataset_package(root)
+    root = package.root
+    metadata = package.metadata
     fold_indices = _select_package_folds(root, config.folds)
     candidates = _candidate_names(config)
 
@@ -126,8 +90,7 @@ def run_walk_forward(
     for fold_index in fold_indices:
         for candidate_name in candidates:
             run = executor.run_candidate(
-                dataset_dir=str(root),
-                metadata=metadata,
+                package=package,
                 config=config,
                 fold_index=fold_index,
                 candidate_name=candidate_name,

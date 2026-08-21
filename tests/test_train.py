@@ -10,26 +10,19 @@ import pytest
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 from hft_lob import train
-from hft_lob.configs.experiment import EvaluationConfig
 from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
 
 
 class FakeTrainer:
-    def __init__(self, *, predictions: list[PredictionArtifact] | None = None) -> None:
+    def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.predictions = predictions or []
 
     def fit(self, **kwargs: Any) -> None:
         self.calls.append(("fit", kwargs))
 
     def test(self, **kwargs: Any) -> None:
         self.calls.append(("test", kwargs))
-
-    def predict(self, **kwargs: Any) -> list[PredictionArtifact]:
-        self.calls.append(("predict", kwargs))
-        return self.predictions
-
 
 def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
     metadata = tuple(
@@ -105,46 +98,23 @@ def test_run_training_delegates_to_lightning() -> None:
     ]
 
 
-def test_run_test_builds_evaluation_report() -> None:
+def test_run_test_returns_module_artifact() -> None:
     trainer = FakeTrainer()
-    module = SimpleNamespace(
-        test_artifact=_artifact(),
-        config=SimpleNamespace(
-            evaluation=EvaluationConfig(
-                metrics=("mae",),
-                report_daily=False,
-                prediction_bins=2,
-                bootstrap_samples=2,
-            ),
-            seed=7,
-        ),
+    module = SimpleNamespace(test_artifact=_artifact())
+
+    artifact = train.run_test(
+        trainer, module, SimpleNamespace(), "best.ckpt"  # type: ignore[arg-type]
     )
 
-    report = train.run_test(trainer, module, SimpleNamespace(), "best.ckpt")  # type: ignore[arg-type]
-
-    assert report.sample_count == 2
-    assert report.overall["mae"] == pytest.approx(0.1)
+    assert artifact.predictions.shape == (2,)
     assert trainer.calls[0][0] == "test"
 
 
-def test_run_predict_merges_batch_artifacts() -> None:
-    trainer = FakeTrainer(predictions=[_artifact(offset=0), _artifact(offset=2)])
-    module = SimpleNamespace(prediction_split="validation")
-
-    artifact = train.run_predict(
-        trainer, module, SimpleNamespace(), "best.ckpt", split="test"  # type: ignore[arg-type]
-    )
-
-    assert artifact.predictions.shape == (4,)
-    assert len(artifact.metadata) == 4
-    assert module.prediction_split == "test"
-
-
-def test_run_predict_rejects_empty_outputs() -> None:
+def test_run_test_rejects_missing_artifact() -> None:
     with pytest.raises(RuntimeError, match="PredictionArtifact"):
-        train.run_predict(
+        train.run_test(
             FakeTrainer(),
-            SimpleNamespace(prediction_split="test"),
+            SimpleNamespace(test_artifact=None),
             SimpleNamespace(),
             "best.ckpt",  # type: ignore[arg-type]
         )

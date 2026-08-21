@@ -15,12 +15,12 @@ import polars as pl
 import pyarrow.parquet as pq
 
 from hft_lob.configs.experiment import DataBuildConfig
+from hft_lob.datasets.identity import dataset_version, raw_file_hash, stable_config_hash
 from hft_lob.datasets.package import FOLD_INDEX_COLUMNS, DatasetPackageMetadata, compute_dataset_id
 from hft_lob.datasets.validation import validate_dataset_package
 from hft_lob.preprocessing.clean import DataCleaner
 from hft_lob.preprocessing.features import FeatureTransformer
 from hft_lob.preprocessing.labels import LabelTransformer
-from hft_lob.preprocessing.manifest import dataset_version, raw_file_hash, stable_config_hash
 from hft_lob.preprocessing.normalize import CausalRollingStandardizer
 from hft_lob.preprocessing.split import (
     Fold,
@@ -78,8 +78,8 @@ def build_dataset_package(config: DataBuildConfig, output_root: str | Path) -> P
     raw_hashes = [raw_file_hash(str(path)) for path in raw_files]
     processing_hash = stable_config_hash(_processing_config(config))
     data_version = dataset_version(
-        config.ticker,
-        raw_hashes,
+        ticker=config.ticker,
+        raw_hashes=raw_hashes,
         processing_config_hash=processing_hash,
     )
     root = Path(output_root).resolve()

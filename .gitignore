@@ -34,3 +34,9 @@ Thumbs.db
 
 .hermes/
 .*/
+code2llm_output/
+data/
+*.ckpt
+*.npz
+*.pt
+*.parquet

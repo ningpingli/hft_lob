@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import random
 from functools import partial
-from pathlib import Path
 from typing import cast
 
 import lightning.pytorch as pl
@@ -14,8 +13,8 @@ from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import LoaderConfig
 from hft_lob.datasets.contracts import LOBBatch, SampleMeta
+from hft_lob.datasets.package import DatasetPackage
 from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
-from hft_lob.datasets.validation import validate_dataset_package
 
 
 def _seed_worker(worker_id: int, base_seed: int) -> None:
@@ -35,17 +34,17 @@ def _collate(batch: list[tuple[torch.Tensor, torch.Tensor, SampleMeta]]) -> LOBB
 class LOBDataModule(pl.LightningDataModule):
     """加载一个不可变数据包的指定 fold；不包含 ETL fallback。"""
 
-    def __init__(self, dataset_dir: str | Path, *, fold_index: int, loader: LoaderConfig, seed: int) -> None:
+    def __init__(self, package: DatasetPackage, *, fold_index: int, loader: LoaderConfig, seed: int) -> None:
         super().__init__()
-        self.dataset_dir = Path(dataset_dir).resolve()
-        self.metadata = validate_dataset_package(self.dataset_dir)
+        self.package = package
+        self.dataset_dir = package.root
+        self.metadata = package.metadata
         self.fold_index = fold_index
         self.loader = loader
         self.seed = seed
         self.train_dataset: PrebuiltLOBDataset | None = None
         self.val_dataset: PrebuiltLOBDataset | None = None
         self.test_dataset: PrebuiltLOBDataset | None = None
-        self.predict_dataset: PrebuiltLOBDataset | None = None
         self.save_hyperparameters({"dataset_id": self.metadata.dataset_id, "fold_index": fold_index})
 
     @property
@@ -56,7 +55,7 @@ class LOBDataModule(pl.LightningDataModule):
         return None
 
     def setup(self, stage: str | None = None) -> None:
-        if stage not in {None, "fit", "validate", "test", "predict"}:
+        if stage not in {None, "fit", "validate", "test"}:
             raise ValueError(f"unsupported Lightning stage: {stage!r}")
         if stage in (None, "fit"):
             self.train_dataset = self._dataset("train")
@@ -65,8 +64,6 @@ class LOBDataModule(pl.LightningDataModule):
             self.val_dataset = self._dataset("validation")
         if stage in (None, "test"):
             self.test_dataset = self._dataset("test")
-        if stage in (None, "predict"):
-            self.predict_dataset = self._dataset("test")
 
     def train_dataloader(self) -> DataLoader:
         return self._make_loader(self._require("train_dataset"), shuffle=True)
@@ -77,9 +74,6 @@ class LOBDataModule(pl.LightningDataModule):
     def test_dataloader(self) -> DataLoader:
         return self._make_loader(self._require("test_dataset"), shuffle=False)
 
-    def predict_dataloader(self) -> DataLoader:
-        return self._make_loader(self._require("predict_dataset"), shuffle=False)
-
     def teardown(self, stage: str | None = None) -> None:
         if stage in (None, "fit"):
             self.train_dataset = None
@@ -88,8 +82,6 @@ class LOBDataModule(pl.LightningDataModule):
             self.val_dataset = None
         if stage in (None, "test"):
             self.test_dataset = None
-        if stage in (None, "predict"):
-            self.predict_dataset = None
 
     def _dataset(self, split: str) -> PrebuiltLOBDataset:
         return PrebuiltLOBDataset(self.dataset_dir, self.metadata, fold_index=self.fold_index, split=split)

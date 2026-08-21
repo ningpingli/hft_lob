@@ -5,22 +5,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import lightning as L
-import numpy as np
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import Logger
 
 from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.lob_data_module import LOBDataModule
-from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
 
 __all__ = [
     "build_checkpoint_callback",
     "build_early_stopping_callback",
     "build_trainer",
-    "run_predict",
     "run_test",
     "run_training",
 ]
@@ -212,18 +209,17 @@ def run_test(
     lightning_module: L.LightningModule,
     datamodule: LOBDataModule,
     ckpt_path: str,
-) -> EvaluationReport:
-    """
-    执行测试流程（加载最佳检查点后评估）。
+) -> PredictionArtifact:
+    """加载最佳检查点，在 test split 上运行并返回统一预测产物。
 
     Args:
         trainer: 已配置的 Trainer 实例。
-        lightning_module: 训练模块（用于提供模型架构）。
+        lightning_module: 测试模块。
         datamodule: 数据模块。
-        ckpt_path: 最佳检查点路径。
+        ckpt_path: 检查点路径。
 
     Returns:
-        统一结构化评估报告。
+        含完整 metadata/model/dataset/fold 的统一预测产物。
     """
     _require_checkpoint(ckpt_path)
     trainer.test(
@@ -234,67 +230,8 @@ def run_test(
     artifact = getattr(lightning_module, "test_artifact", None)
     if not isinstance(artifact, PredictionArtifact):
         raise RuntimeError("test completed without a PredictionArtifact")
-    config = getattr(lightning_module, "config", None)
-    if config is None:
-        raise TypeError("lightning_module must expose its ExperimentConfig as config")
-    return build_evaluation_report(artifact, config.evaluation, seed=config.seed)
-
-
-def run_predict(
-    trainer: L.Trainer,
-    lightning_module: L.LightningModule,
-    datamodule: LOBDataModule,
-    ckpt_path: str,
-    split: str = "test",
-) -> PredictionArtifact:
-    """
-    执行预测流程（加载检查点后推理）。
-
-    Args:
-        trainer: 已配置的 Trainer 实例。
-        lightning_module: 预测模块。
-        datamodule: 数据模块。
-        ckpt_path: 检查点路径。
-        split: 当前预测所属 split。
-
-    Returns:
-        含完整 metadata/model/dataset/fold 的统一预测产物。
-    """
-    _require_checkpoint(ckpt_path)
-    if not split.strip():
-        raise ValueError("split must not be empty")
-    if hasattr(lightning_module, "prediction_split"):
-        cast(Any, lightning_module).prediction_split = split
-    outputs = trainer.predict(
-        model=lightning_module,
-        datamodule=datamodule,
-        ckpt_path=ckpt_path,
-    )
-    artifact = getattr(lightning_module, "prediction_artifact", None)
-    if artifact is None and outputs:
-        artifacts = [item for item in outputs if isinstance(item, PredictionArtifact)]
-        if len(artifacts) == len(outputs):
-            identity = {
-                (item.model_name, item.model_version, item.dataset_version, item.fold_index, item.split)
-                for item in artifacts
-            }
-            if len(identity) != 1:
-                raise ValueError("prediction batches have mismatched artifact identity")
-            first = artifacts[0]
-            artifact = PredictionArtifact(
-                predictions=np.concatenate([item.predictions for item in artifacts]),
-                targets=np.concatenate([item.targets for item in artifacts]),
-                metadata=tuple(meta for item in artifacts for meta in item.metadata),
-                model_name=first.model_name,
-                model_version=first.model_version,
-                dataset_version=first.dataset_version,
-                fold_index=first.fold_index,
-                split=first.split,
-            )
-    if not isinstance(artifact, PredictionArtifact):
-        raise RuntimeError("predict completed without a PredictionArtifact")
-    if artifact.split != split:
-        raise RuntimeError("prediction artifact split does not match requested split")
+    if artifact.split != "test":
+        raise RuntimeError("test artifact split must be 'test'")
     return artifact
 
 
