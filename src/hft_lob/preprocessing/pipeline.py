@@ -20,6 +20,7 @@ from hft_lob.preprocessing.manifest import (
     feature_version,
     label_version,
     raw_file_hash,
+    read_manifest,
     stable_config_hash,
     write_manifest,
 )
@@ -76,6 +77,26 @@ def prepare_dataset(config: ExperimentConfig) -> PreparedDataset:
     manifest_path = manifest_root / "manifest.parquet"
     quality_path = manifest_root / "quality_reports.parquet"
 
+    if manifest_path.is_file() and quality_path.is_file():
+        manifest = read_manifest(str(manifest_path))
+        if (
+            manifest.get_column("dataset_version").unique().to_list() == [version]
+            and manifest.get_column("processing_config_hash").unique().to_list()
+            == [processing_hash]
+            and sorted(manifest.get_column("raw_hash").unique().to_list())
+            == sorted(set(raw_hash_by_path.values()))
+            and all(Path(path).is_file() for path in manifest.get_column("processed_file"))
+        ):
+            return PreparedDataset(
+                dataset_version=version,
+                feature_columns=feature_columns,
+                feature_version=feature_id,
+                label_version=label_id,
+                manifest_path=str(manifest_path.resolve()),
+                quality_report_path=str(quality_path.resolve()),
+                walk_forward_plan=_build_walk_forward_plan(manifest, config, version),
+            )
+
     records: list[dict[str, object]] = []
     quality_records: list[dict[str, object]] = []
     seen_sessions: set[tuple[str, str]] = set()
@@ -118,17 +139,7 @@ def prepare_dataset(config: ExperimentConfig) -> PreparedDataset:
             )
 
     manifest = build_manifest(ticker=config.ticker, records=records)
-    trade_dates = (
-        manifest.get_column("trade_date").unique().sort().to_list()
-    )
-    if config.walk_forward.enabled:
-        folds = tuple(walk_forward_folds(trade_dates, config.walk_forward))
-    else:
-        split = chronological_split(trade_dates, config.split)
-        folds = (
-            Fold(1, split.train_dates, split.validation_dates, split.test_dates),
-        )
-    plan = WalkForwardPlan(dataset_version=version, folds=folds)
+    plan = _build_walk_forward_plan(manifest, config, version)
 
     write_manifest(manifest, str(manifest_path))
     quality_frame = pl.DataFrame(quality_records).sort("trade_date")
@@ -142,6 +153,20 @@ def prepare_dataset(config: ExperimentConfig) -> PreparedDataset:
         quality_report_path=str(quality_path.resolve()),
         walk_forward_plan=plan,
     )
+
+
+def _build_walk_forward_plan(
+    manifest: pl.DataFrame,
+    config: ExperimentConfig,
+    version: str,
+) -> WalkForwardPlan:
+    trade_dates = manifest.get_column("trade_date").unique().sort().to_list()
+    if config.walk_forward.enabled:
+        folds = tuple(walk_forward_folds(trade_dates, config.walk_forward))
+    else:
+        split = chronological_split(trade_dates, config.split)
+        folds = (Fold(1, split.train_dates, split.validation_dates, split.test_dates),)
+    return WalkForwardPlan(dataset_version=version, folds=folds)
 
 
 def _discover_raw_files(config: ExperimentConfig) -> list[Path]:

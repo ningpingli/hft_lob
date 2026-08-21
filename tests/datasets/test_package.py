@@ -80,6 +80,7 @@ def _write_package(tmp_path: Path) -> Path:
     (root / "dataset.json").write_text(
         json.dumps(metadata.to_dict(), ensure_ascii=False), encoding="utf-8"
     )
+    pl.DataFrame({"status": ["passed"]}).write_parquet(root / "quality.parquet")
     (root / "_SUCCESS").touch()
     return root
 

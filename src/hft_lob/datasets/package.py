@@ -153,6 +153,8 @@ def fold_index_path(package_dir: str | Path, fold_index: int, split: str) -> Pat
 
 def validate_fold_index(frame: pl.DataFrame) -> None:
     """校验 fold 索引的固定列、类型和样本身份。"""
+    if frame.is_empty():
+        raise ValueError("fold index must not be empty")
     if tuple(frame.columns) != FOLD_INDEX_COLUMNS:
         raise ValueError(f"invalid fold index columns: {frame.columns}")
     type_errors = {

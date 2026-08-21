@@ -24,6 +24,7 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
+from hft_lob.preprocessing.clean import DataCleaner
 from hft_lob.preprocessing.manifest import read_manifest
 from hft_lob.preprocessing.pipeline import prepare_dataset
 
@@ -69,7 +70,9 @@ def _config(tmp_path: Path) -> ExperimentConfig:
     )
 
 
-def test_prepare_dataset_builds_content_addressed_session_artifacts(tmp_path: Path) -> None:
+def test_prepare_dataset_builds_content_addressed_session_artifacts(
+    tmp_path: Path, monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
     raw_root = tmp_path / "raw" / "TEST"
     raw_root.mkdir(parents=True)
     for day in range(1, 6):
@@ -103,5 +106,9 @@ def test_prepare_dataset_builds_content_addressed_session_artifacts(tmp_path: Pa
     assert "Target_60s_log" in processed.columns
     assert not any(name.startswith("normalized__") for name in processed.columns)
 
+    def unexpected_clean(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("cache hit must not rerun cleaning")
+
+    monkeypatch.setattr(DataCleaner, "clean_day", unexpected_clean)
     repeated = prepare_dataset(_config(tmp_path))
     assert repeated.dataset_version == prepared.dataset_version
