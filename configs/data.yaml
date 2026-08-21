@@ -1,38 +1,35 @@
 task:
-  ticker: "000001"
+  ticker: "688981"
   task_type: regression
 
 data:
   levels: 5
   snapshot_interval_seconds: 3
-  raw_dir: data/raw
+  raw_dir: /data/lnp/data/raw
   column_mapping:
-    AskPrice1: ASKp1
-    AskVolume1: ASKs1
-    BidPrice1: BIDp1
-    BidVolume1: BIDs1
-    AskPrice2: ASKp2
-    AskVolume2: ASKs2
-    BidPrice2: BIDp2
-    BidVolume2: BIDs2
-    AskPrice3: ASKp3
-    AskVolume3: ASKs3
-    BidPrice3: BIDp3
-    BidVolume3: BIDs3
-    AskPrice4: ASKp4
-    AskVolume4: ASKs4
-    BidPrice4: BIDp4
-    BidVolume4: BIDs4
-    AskPrice5: ASKp5
-    AskVolume5: ASKs5
-    BidPrice5: BIDp5
-    BidVolume5: BIDs5
-    timestamp: timestamp
-    trade_date: trade_date
-    ticker: ticker
+    a1: ASKp1
+    a1_v: ASKs1
+    b1: BIDp1
+    b1_v: BIDs1
+    a2: ASKp2
+    a2_v: ASKs2
+    b2: BIDp2
+    b2_v: BIDs2
+    a3: ASKp3
+    a3_v: ASKs3
+    b3: BIDp3
+    b3_v: BIDs3
+    a4: ASKp4
+    a4_v: ASKs4
+    b4: BIDp4
+    b4_v: BIDs4
+    a5: ASKp5
+    a5_v: ASKs5
+    b5: BIDp5
+    b5_v: BIDs5
     last: last
+    volume: volume
     amount: amount
-    volumn: volume
 
 cleaning:
   max_ffill_gap_seconds: 6
