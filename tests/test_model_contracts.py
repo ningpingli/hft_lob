@@ -69,8 +69,7 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         history_snapshots=_HISTORY,
     )
-    model_input = sample if name in {"cnn1", "deeplob", "cnn2"} else sample.unsqueeze(1)
-    out = model(model_input)
+    out = model(sample)
     assert out.shape == (2, 1)
 
 
@@ -90,8 +89,7 @@ def test_all_registered_models_have_scalar_regression_output(
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         history_snapshots=_HISTORY,
     )
-    model_input = sample if name in {"cnn1", "deeplob", "cnn2"} else sample.unsqueeze(1)
-    prediction = model(model_input)
+    prediction = model(sample)
     assert prediction.ndim == 2
     assert prediction.shape[-1] == 1
 
@@ -112,7 +110,7 @@ def test_hlob_constructs_and_forwards_with_minimal_structures(
         history_snapshots=_HISTORY,
         homological_structures=structures,
     )
-    out = model(sample.unsqueeze(1))
+    out = model(sample)
     assert out.shape == (2, 1)
 
 
@@ -173,12 +171,12 @@ def test_contract_injections() -> None:
         ("cnn1", torch.randn(2, _HISTORY, _FEATURES + 4)),
         ("deeplob", torch.randn(2, _HISTORY, _FEATURES + 4)),
         ("cnn2", torch.randn(2, _HISTORY, _FEATURES + 4)),
-        ("transformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
-        ("lobtransformer", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
-        ("axiallob", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
-        ("dla", torch.randn(2, 1, _HISTORY, _FEATURES + 4)),
+        ("transformer", torch.randn(2, _HISTORY, _FEATURES + 4)),
+        ("lobtransformer", torch.randn(2, _HISTORY, _FEATURES + 4)),
+        ("axiallob", torch.randn(2, _HISTORY, _FEATURES + 4)),
+        ("dla", torch.randn(2, _HISTORY, _FEATURES + 4)),
         # iTransformer 只校验时间维（嵌入宽度绑定 history_length）。
-        ("itransformer", torch.randn(2, 1, _HISTORY // 2, _FEATURES)),
+        ("itransformer", torch.randn(2, _HISTORY // 2, _FEATURES)),
     ],
 )
 def test_input_dimension_mismatch_raises(name: str, x: torch.Tensor) -> None:
@@ -191,7 +189,27 @@ def test_input_dimension_mismatch_raises(name: str, x: torch.Tensor) -> None:
         model(x)
 
 
-def test_cnn2_rejects_legacy_channel_dimension() -> None:
-    model = CNN2(num_features=_FEATURES, history_length=_HISTORY)
+@pytest.mark.parametrize("name", ("cnn2", "itransformer", "lobtransformer", "axiallob"))
+def test_models_reject_legacy_channel_dimension(name: str) -> None:
+    model = build_model(
+        _make_config(name),
+        feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
+    )
+    with pytest.raises(ValueError, match=r"expects \[B, T, F\]"):
+        model(torch.randn(2, 1, _HISTORY, _FEATURES))
+
+
+def test_hlob_rejects_legacy_channel_dimension() -> None:
+    model = build_model(
+        _make_config("hlob"),
+        feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
+        homological_structures={
+            "tetrahedra": list(range(8)),
+            "triangles": list(range(6)),
+            "edges": list(range(4)),
+        },
+    )
     with pytest.raises(ValueError, match=r"expects \[B, T, F\]"):
         model(torch.randn(2, 1, _HISTORY, _FEATURES))

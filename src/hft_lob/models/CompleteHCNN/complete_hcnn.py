@@ -148,7 +148,7 @@ class Complete_HCNN(nn.Module):
         """前向传播。
 
         Args:
-            x: 输入张量 ``(N, 1, history_length, num_features)``。
+            x: 统一时序输入 ``[B, T, F]``；卷积通道维由本模型内部增加。
 
         Returns:
             模型输出 ``(N, 1)``。
@@ -156,6 +156,8 @@ class Complete_HCNN(nn.Module):
         Raises:
             ValueError: 同调特征索引超出输入特征轴。
         """
+        if x.ndim != 3:
+            raise ValueError(f"Complete_HCNN expects [B, T, F], got shape {tuple(x.shape)}")
         if x.shape[-1] <= self.max_feature_index:
             raise ValueError(
                 f"Complete_HCNN: homological feature indices reach "
@@ -163,6 +165,7 @@ class Complete_HCNN(nn.Module):
                 f"{x.shape[-1]} features. 同调在另一特征布局上计算，请核对 "
                 f"complete_homological_utils 与 ExperimentConfig 特征列契约。"
             )
+        x = x.unsqueeze(1)
         x_tetrahedra = x[:, :, :, self.tetrahedra]
         x_triangles = x[:, :, :, self.triangles]
         x_edges = x[:, :, :, self.edges]

@@ -210,7 +210,7 @@ class AxialLOB(nn.Module):
         """前向传播。
 
         Args:
-            x: 输入张量（形状 ``(N, 1, H, W)``）。
+            x: 统一时序输入 ``[B, H, W]``；卷积通道维由本模型内部增加。
 
         Returns:
             模型输出 ``(N, 1)``。
@@ -218,13 +218,16 @@ class AxialLOB(nn.Module):
         Raises:
             ValueError: 输入帧尺寸与构造契约不一致。
         """
-        # 输入维度契约：轴向注意力的 dim 与最终 Linear 宽度在构造时由 (H, W) 固定。
+        if x.ndim != 3:
+            raise ValueError(f"AxialLOB expects [B, T, F], got shape {tuple(x.shape)}")
+        # 轴向注意力的 dim 与最终 Linear 宽度在构造时由 (H, W) 固定。
         if x.shape[-1] != self.W or x.shape[-2] != self.H:
             raise ValueError(
-                f"AxialLOB expects samples of shape (1, {self.H}, {self.W}), "
+                f"AxialLOB expects samples of shape ({self.H}, {self.W}), "
                 f"got {tuple(x.shape[1:])}. 请核对 ExperimentConfig 的 "
                 f"window.history_snapshots 与 features 特征列契约。"
             )
+        x = x.unsqueeze(1)
         # 注意力前的首次卷积
         y = self.CNN_in(x)
         y = self.norm(y)

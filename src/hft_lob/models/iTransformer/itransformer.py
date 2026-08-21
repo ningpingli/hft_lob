@@ -64,7 +64,7 @@ class ITransformer(nn.Module):
         """前向传播。
 
         Args:
-            x: 输入张量 ``(N, 1, history_length, num_features)``。
+            x: 统一时序输入 ``[B, T, F]``。
 
         Returns:
             模型输出 ``(N, 1)``。
@@ -72,14 +72,15 @@ class ITransformer(nn.Module):
         Raises:
             ValueError: 时间维与构造契约不一致。
         """
-        # 输入维度契约：嵌入宽度绑定 history_length，时间维不匹配会崩溃。
-        if x.shape[2] != self.history_length:
+        if x.ndim != 3:
+            raise ValueError(f"ITransformer expects [B, T, F], got shape {tuple(x.shape)}")
+        # 嵌入宽度绑定 history_length，时间维不匹配会崩溃。
+        if x.shape[1] != self.history_length:
             raise ValueError(
                 f"ITransformer expects {self.history_length} snapshots per "
-                f"sample, got {x.shape[2]}. 请核对 ExperimentConfig 的 "
+                f"sample, got {x.shape[1]}. 请核对 ExperimentConfig 的 "
                 f"window.history_snapshots 契约。"
             )
-        x = x.squeeze(1)
         # 转置：沿特征维（每条特征一个 token）嵌入历史序列。
         x = x.permute(0, 2, 1)
         x = self.embed(x)

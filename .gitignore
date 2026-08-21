@@ -40,3 +40,4 @@ data/
 *.npz
 *.pt
 *.parquet
+uv.lock

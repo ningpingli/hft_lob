@@ -129,7 +129,7 @@ class LobTransformer(nn.Module):
         """前向传播。
 
         Args:
-            x: 输入张量 ``(N, 1, history_length, num_features)``。
+            x: 统一时序输入 ``[B, T, F]``；卷积通道维由本模型内部增加。
 
         Returns:
             模型输出 ``(N, 1)``。
@@ -137,14 +137,15 @@ class LobTransformer(nn.Module):
         Raises:
             ValueError: 特征维度与构造契约不一致，或卷积后特征轴未坍缩为 1。
         """
-        # 输入维度契约（5 档数据 = 20 特征，10 档 = 40）。
+        if x.ndim != 3:
+            raise ValueError(f"LobTransformer expects [B, T, F], got shape {tuple(x.shape)}")
         if x.shape[-1] != self.num_features:
             raise ValueError(
                 f"LobTransformer expects {self.num_features} features per "
                 f"snapshot, got {x.shape[-1]}. 请核对 ExperimentConfig 的 "
                 f"features 特征列与 data.levels 契约。"
             )
-        x = self.conv1(x)
+        x = self.conv1(x.unsqueeze(1))
         x = self.conv2(x)
         x = self.conv3(x)
 
