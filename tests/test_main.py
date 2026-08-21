@@ -12,6 +12,7 @@ from hft_lob.main import main, parse_args
 def test_parse_training_cli_requires_dataset() -> None:
     args = parse_args(
         [
+            "train",
             "--config",
             "custom.yaml",
             "--dataset-dir",
@@ -32,7 +33,7 @@ def test_parse_training_cli_requires_dataset() -> None:
 
 def test_parse_rejects_unknown_stage_or_missing_dataset() -> None:
     with pytest.raises(SystemExit):
-        parse_args(["--dataset-dir", "dataset", "--stages", "prepare-data"])
+        parse_args(["train", "--dataset-dir", "dataset", "--stages", "prepare-data"])
     with pytest.raises(SystemExit):
         parse_args([])
 
@@ -53,6 +54,7 @@ def test_main_passes_dataset_directly_to_training(
     monkeypatch.setattr(main_module, "run_training_application", fake_run)
     main(
         [
+            "train",
             "--config",
             str(config),
             "--dataset-dir",
@@ -64,3 +66,19 @@ def test_main_passes_dataset_directly_to_training(
     request = seen["request"]
     assert request.dataset_dir == str(dataset_dir)  # type: ignore[union-attr]
     assert request.experiment_id == "cli-training"  # type: ignore[union-attr]
+
+
+def test_main_routes_data_build_to_application(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_build(request):  # type: ignore[no-untyped-def]
+        seen["request"] = request
+        return Path("published/dataset-id")
+
+    main_module = importlib.import_module("hft_lob.main")
+    monkeypatch.setattr(main_module, "build_dataset", fake_build)
+    main(["data", "build", "--config", "data.yaml", "--output-root", "published"])
+
+    request = seen["request"]
+    assert request.config_path == "data.yaml"  # type: ignore[union-attr]
+    assert request.output_root == "published"  # type: ignore[union-attr]
