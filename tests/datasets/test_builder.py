@@ -106,3 +106,5 @@ def test_build_dataset_package_is_complete_and_idempotent(tmp_path: Path) -> Non
     module.setup("fit")
     assert next(iter(module.train_dataloader())).features.ndim == 3
     assert not any(path.name.startswith(".") for path in (tmp_path / "prebuilt").iterdir())
+    assert not (tmp_path / "processed").exists()
+    assert not (tmp_path / "manifests").exists()
