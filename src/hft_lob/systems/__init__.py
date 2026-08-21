@@ -2,7 +2,7 @@
 
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
-from hft_lob.systems.lob_data_module import LOBDataModule, StageFiles
+from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.losses import build_loss
 from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
@@ -22,7 +22,6 @@ __all__ = [
     "LOBDataModule",
     "LOBLightningModule",
     "PredictionArtifact",
-    "StageFiles",
     "WalkForwardReport",
     "WalkForwardExecutor",
     "build_evaluation_report",

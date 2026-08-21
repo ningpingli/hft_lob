@@ -10,7 +10,6 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from hft_lob.configs import load_config
-from hft_lob.preprocessing import prepare_dataset
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 from hft_lob.utils.checkpoint_utils import backup_experiment_config
@@ -20,9 +19,7 @@ from hft_lob.utils.experiment_manager import (
     write_experiment_log,
 )
 
-VALID_STAGES: tuple[str, ...] = (
-    "prepare-data", "walk-forward", "evaluate", "predict-offline",
-)
+VALID_STAGES: tuple[str, ...] = ("walk-forward",)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -34,13 +31,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="LOB walk-forward experiment pipeline")
     parser.add_argument("--config", default="configs/experiment.yaml")
+    parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--experiment-id")
     parser.add_argument("--resume-ckpt")
     parser.add_argument(
         "--stages",
         nargs="+",
         choices=VALID_STAGES,
-        default=["prepare-data"],
+        default=["walk-forward"],
     )
     parser.add_argument("--seed", type=int)
     parser.add_argument(
@@ -93,34 +91,10 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     backup_experiment_config(str(log_dir), asdict(config))
 
-    prepared = None
     for stage in args.stages:
-        if stage == "prepare-data":
-            prepared = prepare_dataset(config)
-            fold_count = len(prepared.walk_forward_plan.folds)
-            write_experiment_log(
-                experiment_id,
-                "dataset_info",
-                {
-                    "dataset_version": prepared.dataset_version,
-                    "feature_version": prepared.feature_version,
-                    "label_version": prepared.label_version,
-                    "feature_count": len(prepared.feature_columns),
-                    "manifest_path": prepared.manifest_path,
-                    "quality_report_path": prepared.quality_report_path,
-                    "fold_count": fold_count,
-                },
-            )
-            print(f"dataset_version={prepared.dataset_version}")
-            print(f"manifest_path={prepared.manifest_path}")
-            print(f"quality_report_path={prepared.quality_report_path}")
-            print(f"fold_count={fold_count}")
-            continue
         if stage == "walk-forward":
-            if prepared is None:
-                prepared = prepare_dataset(config)
             report = run_walk_forward(
-                prepared,
+                args.dataset_dir,
                 config,
                 executor=DefaultWalkForwardExecutor(str(log_dir / "walk_forward")),
             )

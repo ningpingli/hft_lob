@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -14,12 +11,10 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ExperimentConfig
 from hft_lob.datasets.lob_dataset import LOBBatch
+from hft_lob.datasets.package import DatasetPackageMetadata
 from hft_lob.models import build_model
-from hft_lob.preprocessing.normalize import CausalRollingStandardizer
-from hft_lob.preprocessing.pipeline import PreparedDataset
-from hft_lob.preprocessing.split import Fold
 from hft_lob.systems.artifact import PredictionArtifact
-from hft_lob.systems.lob_data_module import LOBDataModule, resolve_stage_files
+from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.walk_forward import CandidateFoldRun
 from hft_lob.train import (
@@ -42,42 +37,36 @@ class DefaultWalkForwardExecutor:
     def run_candidate(
         self,
         *,
-        dataset: PreparedDataset,
+        dataset_dir: str,
+        metadata: DatasetPackageMetadata,
         config: ExperimentConfig,
-        fold: Fold,
+        fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
         output_dir = (
             Path(self.output_root)
-            / f"fold_{fold.index:03d}"
+            / f"fold_{fold_index:03d}"
             / candidate_name
         )
         output_dir.mkdir(parents=True, exist_ok=True)
-        standardizer = CausalRollingStandardizer(
-            dataset.feature_columns,
-            config.normalization.normalize_window,
-        )
-        state_path = _write_json_atomic(
-            output_dir / "standardizer.json",
-            standardizer.state_dict(),
-        )
-        stage_files = resolve_stage_files(dataset, fold_index=fold.index)
         datamodule = LOBDataModule(
-            config,
-            stage_files=stage_files,
-            standardizer=standardizer,
+            dataset_dir,
+            fold_index=fold_index,
+            loader=config.loader,
+            seed=config.seed,
         )
         predictions_path = str((output_dir / "predictions.parquet").resolve())
-        model_version = f"{config.experiment_id}-fold{fold.index}-{candidate_name}"
+        model_version = f"{config.experiment_id}-fold{fold_index}-{candidate_name}"
+        state_path = str((Path(dataset_dir) / "dataset.json").resolve())
 
         if candidate_name in BASELINE_NAMES:
             artifact = self._run_baseline(
                 candidate_name=candidate_name,
-                dataset=dataset,
+                metadata=metadata,
                 config=config,
                 datamodule=datamodule,
                 model_version=model_version,
-                fold_index=fold.index,
+                fold_index=fold_index,
             )
             return CandidateFoldRun(
                 artifact=artifact,
@@ -109,17 +98,17 @@ class DefaultWalkForwardExecutor:
             devices=self.devices,
         )
         lightning_module = LOBLightningModule(
-            build_model(config, feature_columns=dataset.feature_columns),
+            build_model(config, feature_columns=metadata.feature_columns),
             config,
-            dataset_version=dataset.dataset_version,
+            dataset_version=metadata.dataset_id,
             model_version=model_version,
-            fold_index=fold.index,
+            fold_index=fold_index,
         )
         run_training(trainer, lightning_module, datamodule)
         checkpoint_path = checkpoint.best_model_path
         if not checkpoint_path or not Path(checkpoint_path).is_file():
             raise RuntimeError(
-                f"training completed without a best checkpoint for {candidate_name} fold {fold.index}"
+                f"training completed without a best checkpoint for {candidate_name} fold {fold_index}"
             )
         artifact = run_predict(
             trainer,
@@ -139,7 +128,7 @@ class DefaultWalkForwardExecutor:
     def _run_baseline(
         *,
         candidate_name: str,
-        dataset: PreparedDataset,
+        metadata: DatasetPackageMetadata,
         config: ExperimentConfig,
         datamodule: LOBDataModule,
         model_version: str,
@@ -155,10 +144,10 @@ class DefaultWalkForwardExecutor:
             model=build_baseline(
                 candidate_name,
                 config,
-                feature_columns=dataset.feature_columns,
+                feature_columns=metadata.feature_columns,
             ),
             model_version=model_version,
-            dataset_version=dataset.dataset_version,
+            dataset_version=metadata.dataset_id,
             fold_index=fold_index,
         )
         runner.fit(training_batches)
@@ -168,25 +157,3 @@ class DefaultWalkForwardExecutor:
         )
         datamodule.teardown("predict")
         return runner.predict(test_batches, split="test")
-
-
-def _write_json_atomic(path: Path, value: dict[str, object]) -> str:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            mode="w",
-            encoding="utf-8",
-            delete=False,
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            json.dump(value, temporary, ensure_ascii=False, sort_keys=True, indent=2)
-            temporary.write("\n")
-        os.replace(temporary_path, path)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
-    return str(path.resolve())

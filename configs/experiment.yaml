@@ -74,7 +74,6 @@ loader:
   pin_memory: false
   persistent_workers: false
   prefetch_factor: null
-  cache_size: 4
 
 model:
   name: cnn1                  # MVP：cnn1 | deeplob（§18/§39）

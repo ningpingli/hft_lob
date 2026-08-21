@@ -27,14 +27,14 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.datasets.lob_dataset import LOBWindowDataset
-from hft_lob.preprocessing.normalize import CausalRollingStandardizer
-from hft_lob.preprocessing.pipeline import prepare_dataset
-from hft_lob.systems.lob_data_module import LOBDataModule, _seed_worker, resolve_stage_files
+from hft_lob.datasets.builder import build_dataset_package
+from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
+from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.systems.lob_data_module import LOBDataModule, _seed_worker
 from hft_lob.utils.seed import set_seed
 
 
-class RandomizedLOBWindowDataset(LOBWindowDataset):
+class RandomizedLOBWindowDataset(PrebuiltLOBDataset):
     """测试专用包装：让每个 worker 同时消费三套随机流。"""
 
     def __getitem__(self, index: int):  # type: ignore[no-untyped-def]
@@ -86,21 +86,16 @@ def _config(tmp_path: Path) -> ExperimentConfig:
     )
 
 
-def _load_once(config: ExperimentConfig, prepared) -> tuple[torch.Tensor, tuple[str, ...]]:  # type: ignore[no-untyped-def]
-    standardizer = CausalRollingStandardizer(
-        feature_cols=RAW_FEATURE_COLUMNS,
-        normalize_window=config.normalization.normalize_window,
+def _load_once(config: ExperimentConfig, dataset_dir: Path) -> tuple[torch.Tensor, tuple[str, ...]]:
+    metadata = validate_dataset_package(dataset_dir)
+    module = LOBDataModule(
+        dataset_dir, fold_index=1, loader=config.loader, seed=config.seed
     )
-    stage_files = resolve_stage_files(prepared, fold_index=1)
-    module = LOBDataModule(config, stage_files=stage_files, standardizer=standardizer)
     dataset = RandomizedLOBWindowDataset(
-        stage_files.training_files,
-        ticker=config.ticker,
-        window_size=config.window.history_snapshots,
-        feature_cols=RAW_FEATURE_COLUMNS,
-        target_col=config.target_column,
-        cache_size=config.loader.cache_size,
-        standardizer=standardizer,
+        dataset_dir,
+        metadata,
+        fold_index=1,
+        split="train",
     )
     batches = list(module._make_loader(dataset, shuffle=True))
     features = torch.cat([batch.features for batch in batches])
@@ -124,12 +119,12 @@ def test_virtual_raw_lob_pipeline_and_loader_are_reproducible(
         frame.write_parquet(raw_root / f"202601{day:02d}.parquet")
 
     config = _config(tmp_path)
-    prepared = prepare_dataset(config)
+    dataset_dir = build_dataset_package(config, tmp_path / "prebuilt")
 
     set_seed(config.seed)
-    first_features, first_anchors = _load_once(config, prepared)
+    first_features, first_anchors = _load_once(config, dataset_dir)
     set_seed(config.seed)
-    second_features, second_anchors = _load_once(config, prepared)
+    second_features, second_anchors = _load_once(config, dataset_dir)
 
     assert first_anchors == second_anchors
     assert torch.equal(first_features, second_features)

@@ -24,42 +24,20 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.preprocessing.manifest import build_manifest, write_manifest
-from hft_lob.preprocessing.pipeline import PreparedDataset
-from hft_lob.preprocessing.split import Fold, WalkForwardPlan
+from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 
 
 def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Path) -> None:
-    version = "smoke-dataset-v1"
     dates = ["2026-01-05", "2026-01-06", "2026-01-07"]
-    processed_files = [_write_processed(tmp_path, date, day) for day, date in enumerate(dates)]
-    records = [
-        _manifest_record(path, date, version)
-        for path, date in zip(processed_files, dates, strict=True)
-    ]
-    manifest_path = tmp_path / "manifest.parquet"
-    write_manifest(build_manifest(ticker="TEST", records=records), str(manifest_path))
-    quality_path = tmp_path / "quality.parquet"
-    pl.DataFrame({"trade_date": dates}).write_parquet(quality_path)
-    plan = WalkForwardPlan(
-        version,
-        (Fold(1, [dates[0]], [dates[1]], [dates[2]]),),
-    )
-    dataset = PreparedDataset(
-        dataset_version=version,
-        feature_columns=RAW_FEATURE_COLUMNS,
-        feature_version="features-v1",
-        label_version="label-v1",
-        manifest_path=str(manifest_path),
-        quality_report_path=str(quality_path),
-        walk_forward_plan=plan,
-    )
     config = _config(tmp_path)
+    for day, date in enumerate(dates):
+        _write_raw(tmp_path, date, day)
+    dataset_dir = build_dataset_package(config, tmp_path / "prebuilt")
 
     report = run_walk_forward(
-        dataset,
+        dataset_dir,
         config,
         executor=DefaultWalkForwardExecutor(
             str(tmp_path / "results"), accelerator="cpu"
@@ -77,9 +55,13 @@ def _config(tmp_path: Path) -> ExperimentConfig:
     return ExperimentConfig(
         experiment_id="executor-smoke",
         task=TaskConfig(ticker="TEST"),
-        data=DataConfig(manifest_dir=str(tmp_path)),
+        data=DataConfig(
+            raw_dir=str(tmp_path / "raw"),
+            processed_dir=str(tmp_path / "processed"),
+            manifest_dir=str(tmp_path / "manifests"),
+        ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(),
+        target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=8),
         features=FeatureConfig(),
@@ -105,49 +87,20 @@ def _config(tmp_path: Path) -> ExperimentConfig:
     )
 
 
-def _write_processed(tmp_path: Path, trade_date: str, day_offset: int) -> str:
+def _write_raw(tmp_path: Path, trade_date: str, day_offset: int) -> None:
     start = datetime.fromisoformat(f"{trade_date}T09:30:00")
     rows: list[dict[str, object]] = []
     for index in range(30):
         timestamp = start + timedelta(seconds=3 * index)
-        row: dict[str, object] = {
-            "ticker": "TEST",
-            "trade_date": trade_date,
-            "session_id": "AM",
-            "timestamp": timestamp,
-            "seconds": timestamp.time(),
-            "book_valid": True,
-            "feature_valid": True,
-            "target_valid": True,
-            "mid_price": 10.0 + 0.001 * index,
-            "future_mid": 10.1 + 0.001 * index,
-            "Target_60s_log": (day_offset + 1) * 0.001 + index * 0.0001,
-        }
-        for feature_index, name in enumerate(RAW_FEATURE_COLUMNS):
-            row[name] = 1.0 + feature_index * 0.1 + index * 0.01
-        row["ASKp1"] = 10.1 + index * 0.001
-        row["BIDp1"] = 9.9 + index * 0.001
+        row: dict[str, object] = {"timestamp": timestamp}
+        mid = 10.0 + day_offset * 0.01 + index * 0.001
+        for level in range(1, 6):
+            row[f"ASKp{level}"] = mid + level * 0.01
+            row[f"ASKs{level}"] = 100.0 + index + level
+            row[f"BIDp{level}"] = mid - level * 0.01
+            row[f"BIDs{level}"] = 100.0 + index + level
+        row.update(last=mid, volume=1000.0 + index, amount=10000.0 + index)
         rows.append(row)
-    path = tmp_path / f"{trade_date}_AM.parquet"
-    pl.DataFrame(rows).write_parquet(path)
-    return str(path.resolve())
-
-
-def _manifest_record(path: str, trade_date: str, version: str) -> dict[str, object]:
-    start = datetime.fromisoformat(f"{trade_date}T09:30:00")
-    return {
-        "trade_date": trade_date,
-        "session_id": "AM",
-        "source_file": path,
-        "processed_file": path,
-        "raw_hash": "raw-hash",
-        "processing_config_hash": "config-hash",
-        "dataset_version": version,
-        "row_count": 30,
-        "valid_row_count": 30,
-        "data_start": start,
-        "data_end": start + timedelta(seconds=87),
-        "feature_version": "features-v1",
-        "label_version": "label-v1",
-        "quality_status": "passed",
-    }
+    path = tmp_path / "raw" / "TEST" / f"{trade_date.replace('-', '')}.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(rows).select("timestamp", *RAW_FEATURE_COLUMNS).write_parquet(path)

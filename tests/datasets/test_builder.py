@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import polars as pl
-import torch
 
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
@@ -26,7 +26,9 @@ from hft_lob.configs.experiment import (
     WindowConfig,
 )
 from hft_lob.datasets.builder import build_dataset_package
+from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
 from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.systems.lob_data_module import LOBDataModule
 
 
 def _config(tmp_path: Path) -> ExperimentConfig:
@@ -90,10 +92,17 @@ def test_build_dataset_package_is_complete_and_idempotent(tmp_path: Path) -> Non
 
     assert second == first
     assert metadata.ticker == "TEST"
-    assert len(list((first / "sessions").glob("*.pt"))) == 5
+    stored = np.load(first / "features.npy", mmap_mode="r")
+    assert stored.shape[1] == len(RAW_FEATURE_COLUMNS)
     assert len(list((first / "folds").glob("fold_*"))) == 2
     index = pl.read_parquet(first / "folds" / "fold_001" / "train.parquet")
     assert index.height > 0
-    payload = torch.load(first / index.get_column("session_file").item(0), weights_only=True)
-    assert payload["features"].shape[1] == len(RAW_FEATURE_COLUMNS)
+    dataset = PrebuiltLOBDataset(first, metadata, fold_index=1, split="train")
+    features, target, sample = dataset[0]
+    assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
+    assert target.shape == (1,)
+    assert sample.ticker == "TEST"
+    module = LOBDataModule(first, fold_index=1, loader=config.loader, seed=config.seed)
+    module.setup("fit")
+    assert next(iter(module.train_dataloader())).features.ndim == 3
     assert not any(path.name.startswith(".") for path in (tmp_path / "prebuilt").iterdir())

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 
 from hft_lob.configs.experiment import ExperimentConfig, WalkForwardConfig
-from hft_lob.preprocessing.pipeline import PreparedDataset
+from hft_lob.datasets.package import DatasetPackageMetadata
+from hft_lob.datasets.validation import validate_dataset_package
 from hft_lob.preprocessing.split import Fold, WalkForwardPlan
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
 from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
@@ -35,9 +37,10 @@ class WalkForwardExecutor(Protocol):
     def run_candidate(
         self,
         *,
-        dataset: PreparedDataset,
+        dataset_dir: str,
+        metadata: DatasetPackageMetadata,
         config: ExperimentConfig,
-        fold: Fold,
+        fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
         """在一个 fold 上拟合并返回 test split 的预测。"""
@@ -99,7 +102,7 @@ def select_walk_forward_folds(
 
 
 def run_walk_forward(
-    dataset: PreparedDataset,
+    dataset_dir: str | Path,
     config: ExperimentConfig,
     *,
     executor: WalkForwardExecutor,
@@ -113,27 +116,29 @@ def run_walk_forward(
     checkpoint 和 early stopping 必须使用 ``config.training.monitor_metric`` 与
     ``config.training.monitor_mode``，不允许 runner 自行定义另一套指标名。
     """
-    if dataset.dataset_version != dataset.walk_forward_plan.dataset_version:
-        raise ValueError("prepared dataset and walk-forward plan versions do not match")
-
-    folds = select_walk_forward_folds(dataset.walk_forward_plan, config.walk_forward)
-    if not folds:
-        raise ValueError("walk-forward execution is disabled")
+    root = Path(dataset_dir).resolve()
+    metadata = validate_dataset_package(root)
+    if metadata.ticker != config.ticker:
+        raise ValueError("model config ticker does not match dataset package")
+    if metadata.history_snapshots != config.window.history_snapshots:
+        raise ValueError("model window does not match dataset package")
+    fold_indices = _select_package_folds(root, config.walk_forward)
     candidates = _candidate_names(config)
 
     results: list[FoldResult] = []
-    for fold in folds:
+    for fold_index in fold_indices:
         for candidate_name in candidates:
             run = executor.run_candidate(
-                dataset=dataset,
+                dataset_dir=str(root),
+                metadata=metadata,
                 config=config,
-                fold=fold,
+                fold_index=fold_index,
                 candidate_name=candidate_name,
             )
             _validate_candidate_run(
                 run,
-                dataset_version=dataset.dataset_version,
-                fold_index=fold.index,
+                dataset_version=metadata.dataset_id,
+                fold_index=fold_index,
                 candidate_name=candidate_name,
             )
             predictions_path = save_prediction_artifact(
@@ -143,13 +148,13 @@ def run_walk_forward(
             evaluation = build_evaluation_report(
                 run.artifact,
                 config.evaluation,
-                seed=config.seed + fold.index,
+                seed=config.seed + fold_index,
             )
             results.append(
                 FoldResult(
-                    fold_index=fold.index,
+                    fold_index=fold_index,
                     candidate_name=candidate_name,
-                    dataset_version=dataset.dataset_version,
+                    dataset_version=metadata.dataset_id,
                     standardizer_state_path=run.standardizer_state_path,
                     checkpoint_path=run.checkpoint_path,
                     predictions_path=predictions_path,
@@ -158,10 +163,25 @@ def run_walk_forward(
             )
 
     return WalkForwardReport(
-        dataset_version=dataset.dataset_version,
+        dataset_version=metadata.dataset_id,
         fold_results=tuple(results),
         summary=_summarize_results(results, candidates=candidates),
     )
+
+
+def _select_package_folds(root: Path, config: WalkForwardConfig) -> tuple[int, ...]:
+    if not config.enabled:
+        raise ValueError("walk-forward execution is disabled")
+    available = tuple(
+        sorted(int(path.name.removeprefix("fold_")) for path in (root / "folds").glob("fold_*"))
+    )
+    if config.start_fold not in available:
+        raise ValueError(f"walk_forward.start_fold {config.start_fold} is not in the package")
+    start = available.index(config.start_fold)
+    selected = available[start:] if config.num_folds is None else available[start : start + config.num_folds]
+    if config.num_folds is not None and len(selected) != config.num_folds:
+        raise ValueError(f"walk_forward.num_folds requests {config.num_folds}, only {len(selected)} available")
+    return selected
 
 
 def _candidate_names(config: ExperimentConfig) -> tuple[str, ...]:

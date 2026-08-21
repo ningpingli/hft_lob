@@ -115,7 +115,6 @@ class LoaderConfig:
     pin_memory: bool = False
     persistent_workers: bool = False
     prefetch_factor: int | None = None  # None = PyTorch 默认
-    cache_size: int = 4  # LOBWindowDataset 文件内存缓存上限（按文件数计）
 
 
 @dataclass(frozen=True)

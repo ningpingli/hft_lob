@@ -4,9 +4,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import pytest
-import torch
 
 from hft_lob.datasets.package import (
     FOLD_INDEX_SCHEMA,
@@ -40,34 +40,26 @@ def _metadata() -> DatasetPackageMetadata:
 def _write_package(tmp_path: Path) -> Path:
     metadata = _metadata()
     root = tmp_path / metadata.dataset_id
-    session = root / "sessions" / "2020-07-16_AM.pt"
-    session.parent.mkdir(parents=True)
-    torch.save(
+    root.mkdir(parents=True)
+    np.save(root / "features.npy", np.ones((4, 2), dtype=np.float32))
+    np.save(root / "targets.npy", np.ones((4, 1), dtype=np.float32))
+    np.save(root / "validity.npy", np.ones((4, 2), dtype=np.bool_))
+    np.save(root / "market.npy", np.ones((4, 4), dtype=np.float32))
+    timestamps = [datetime(2020, 7, 16, 9, 30, 3 * index) for index in range(4)]
+    pl.DataFrame(
         {
-            "features": torch.ones(4, 2),
-            "targets": torch.ones(4, 1),
-            "row_valid": torch.ones(4, dtype=torch.bool),
-            "target_valid": torch.ones(4, dtype=torch.bool),
-            "timestamps": [
-                "2020-07-16T09:30:00",
-                "2020-07-16T09:30:03",
-                "2020-07-16T09:30:06",
-                "2020-07-16T09:30:09",
-            ],
-            "mid_price": torch.ones(4),
-            "future_mid": torch.ones(4),
-            "bid1": torch.ones(4),
-            "ask1": torch.ones(4),
-            "trade_date": "2020-07-16",
-            "session_id": "AM",
-        },
-        session,
-    )
+            "global_index": range(4),
+            "trade_date": ["2020-07-16"] * 4,
+            "session_id": ["AM"] * 4,
+            "timestamp": timestamps,
+        }
+    ).write_parquet(root / "rows.parquet")
     fold_dir = root / "folds" / "fold_001"
     fold_dir.mkdir(parents=True)
     frame = pl.DataFrame(
         {
-            "session_file": ["sessions/2020-07-16_AM.pt"],
+            "global_anchor_index": [2],
+            "session_start_index": [0],
             "anchor_index": [2],
             "trade_date": ["2020-07-16"],
             "session_id": ["AM"],
@@ -102,15 +94,15 @@ def test_validate_complete_dataset_package(tmp_path: Path) -> None:
     assert validate_dataset_package(root) == _metadata()
 
 
-def test_validation_rejects_unpublished_or_missing_session(tmp_path: Path) -> None:
+def test_validation_rejects_unpublished_or_missing_array(tmp_path: Path) -> None:
     root = _write_package(tmp_path)
     (root / "_SUCCESS").unlink()
     with pytest.raises(ValueError, match="not published"):
         validate_dataset_package(root)
 
     (root / "_SUCCESS").touch()
-    (root / "sessions" / "2020-07-16_AM.pt").unlink()
-    with pytest.raises(ValueError, match="missing session"):
+    (root / "features.npy").unlink()
+    with pytest.raises(FileNotFoundError):
         validate_dataset_package(root)
 
 

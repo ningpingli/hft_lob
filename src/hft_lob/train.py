@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import lightning as L
+import numpy as np
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import Logger
 
@@ -264,12 +265,32 @@ def run_predict(
         raise ValueError("split must not be empty")
     if hasattr(lightning_module, "prediction_split"):
         cast(Any, lightning_module).prediction_split = split
-    trainer.predict(
+    outputs = trainer.predict(
         model=lightning_module,
         datamodule=datamodule,
         ckpt_path=ckpt_path,
     )
     artifact = getattr(lightning_module, "prediction_artifact", None)
+    if artifact is None and outputs:
+        artifacts = [item for item in outputs if isinstance(item, PredictionArtifact)]
+        if len(artifacts) == len(outputs):
+            identity = {
+                (item.model_name, item.model_version, item.dataset_version, item.fold_index, item.split)
+                for item in artifacts
+            }
+            if len(identity) != 1:
+                raise ValueError("prediction batches have mismatched artifact identity")
+            first = artifacts[0]
+            artifact = PredictionArtifact(
+                predictions=np.concatenate([item.predictions for item in artifacts]),
+                targets=np.concatenate([item.targets for item in artifacts]),
+                metadata=tuple(meta for item in artifacts for meta in item.metadata),
+                model_name=first.model_name,
+                model_version=first.model_version,
+                dataset_version=first.dataset_version,
+                fold_index=first.fold_index,
+                split=first.split,
+            )
     if not isinstance(artifact, PredictionArtifact):
         raise RuntimeError("predict completed without a PredictionArtifact")
     if artifact.split != split:

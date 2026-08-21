@@ -6,31 +6,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import polars as pl
-import torch
 
 from hft_lob.preprocessing.manifest import stable_config_hash
 
-PACKAGE_SCHEMA_VERSION = 1
+PACKAGE_SCHEMA_VERSION = 2
 SUCCESS_MARKER = "_SUCCESS"
 
-SESSION_KEYS = frozenset(
-    {
-        "features",
-        "targets",
-        "row_valid",
-        "target_valid",
-        "timestamps",
-        "mid_price",
-        "future_mid",
-        "bid1",
-        "ask1",
-        "trade_date",
-        "session_id",
-    }
-)
+ARRAY_FILES = ("features.npy", "targets.npy", "validity.npy", "market.npy")
 
 FOLD_INDEX_COLUMNS = (
-    "session_file",
+    "global_anchor_index",
+    "session_start_index",
     "anchor_index",
     "trade_date",
     "session_id",
@@ -38,7 +24,8 @@ FOLD_INDEX_COLUMNS = (
 )
 
 FOLD_INDEX_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
-    "session_file": pl.String,
+    "global_anchor_index": pl.Int64,
+    "session_start_index": pl.Int64,
     "anchor_index": pl.Int64,
     "trade_date": pl.String,
     "session_id": pl.String,
@@ -166,60 +153,14 @@ def validate_fold_index(frame: pl.DataFrame) -> None:
         raise ValueError(f"invalid fold index dtypes: {type_errors}")
     if frame.null_count().select(pl.sum_horizontal(pl.all())).item() != 0:
         raise ValueError("fold index must not contain null values")
-    if not frame.filter(pl.col("anchor_index") < 0).is_empty():
-        raise ValueError("anchor_index must be >= 0")
+    if not frame.filter(
+        (pl.col("global_anchor_index") < 0)
+        | (pl.col("session_start_index") < 0)
+        | (pl.col("anchor_index") < 0)
+    ).is_empty():
+        raise ValueError("fold indexes must be >= 0")
     duplicate = frame.select(
-        pl.struct("session_file", "anchor_index").is_duplicated().any()
+        pl.col("global_anchor_index").is_duplicated().any()
     ).item()
     if bool(duplicate):
         raise ValueError("fold index contains duplicate samples")
-
-
-def validate_session_payload(
-    payload: object,
-    *,
-    feature_count: int,
-    feature_dtype: str | None = None,
-    target_dtype: str | None = None,
-) -> dict[str, object]:
-    """校验单个 session ``.pt`` 的张量和逐行字段契约。"""
-    if not isinstance(payload, dict):
-        raise ValueError("session payload must be a dictionary")
-    missing = sorted(SESSION_KEYS.difference(payload))
-    unknown = sorted(set(payload).difference(SESSION_KEYS))
-    if missing or unknown:
-        raise ValueError(f"invalid session fields: missing={missing}, unknown={unknown}")
-
-    features = payload["features"]
-    if not isinstance(features, torch.Tensor) or features.ndim != 2:
-        raise ValueError("session features must be a [R,F] tensor")
-    if features.shape[1] != feature_count or not features.dtype.is_floating_point:
-        raise ValueError("session features do not match feature count or dtype")
-    if feature_dtype is not None and str(features.dtype).removeprefix("torch.") != feature_dtype:
-        raise ValueError("session feature dtype does not match dataset metadata")
-    row_count = features.shape[0]
-    tensor_shapes = {
-        "targets": (row_count, 1),
-        "row_valid": (row_count,),
-        "target_valid": (row_count,),
-        "mid_price": (row_count,),
-        "future_mid": (row_count,),
-        "bid1": (row_count,),
-        "ask1": (row_count,),
-    }
-    for name, shape in tensor_shapes.items():
-        value = payload[name]
-        if not isinstance(value, torch.Tensor) or tuple(value.shape) != shape:
-            raise ValueError(f"session {name} must have shape {shape}")
-    targets = payload["targets"]
-    if target_dtype is not None and str(targets.dtype).removeprefix("torch.") != target_dtype:
-        raise ValueError("session target dtype does not match dataset metadata")
-    if payload["row_valid"].dtype != torch.bool or payload["target_valid"].dtype != torch.bool:
-        raise ValueError("session validity tensors must use torch.bool")
-    timestamps = payload["timestamps"]
-    if not isinstance(timestamps, (list, tuple)) or len(timestamps) != row_count:
-        raise ValueError("session timestamps must contain one value per row")
-    for name in ("trade_date", "session_id"):
-        if not isinstance(payload[name], str) or not payload[name].strip():
-            raise ValueError(f"session {name} must be a non-empty string")
-    return payload

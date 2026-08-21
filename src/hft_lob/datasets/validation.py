@@ -3,86 +3,119 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
-from typing import cast
 
+import numpy as np
 import polars as pl
-import torch
 
-from hft_lob.datasets.package import (
-    SUCCESS_MARKER,
-    DatasetPackageMetadata,
-    validate_fold_index,
-    validate_session_payload,
-)
+from hft_lob.datasets.package import SUCCESS_MARKER, DatasetPackageMetadata, validate_fold_index
+
+_ROW_COLUMNS = ("global_index", "trade_date", "session_id", "timestamp")
+_ROW_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "global_index": pl.Int64,
+    "trade_date": pl.String,
+    "session_id": pl.String,
+    "timestamp": pl.Datetime("us"),
+}
 
 
 def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
-    """验证已发布数据包并返回其 metadata；不修复、不回退构建。"""
+    """验证已发布数据包并返回 metadata；不修复、不回退构建。"""
     root = Path(package_dir).resolve()
     if not (root / SUCCESS_MARKER).is_file():
         raise ValueError(f"dataset package is not published: missing {SUCCESS_MARKER}")
-    metadata_path = root / "dataset.json"
-    if not metadata_path.is_file():
-        raise FileNotFoundError(metadata_path)
-    try:
-        raw_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError("dataset.json is not valid UTF-8 JSON") from exc
-    if not isinstance(raw_metadata, dict):
-        raise ValueError("dataset.json root must be an object")
-    metadata = DatasetPackageMetadata.from_dict(raw_metadata)
+    metadata = _read_metadata(root / "dataset.json")
     if root.name != metadata.dataset_id:
         raise ValueError("package directory name must equal dataset_id")
-    if not (root / "quality.parquet").is_file():
-        raise ValueError("dataset package is missing quality.parquet")
+    for name in ("quality.parquet", "rows.parquet"):
+        if not (root / name).is_file():
+            raise ValueError(f"dataset package is missing {name}")
 
+    features = np.load(root / "features.npy", mmap_mode="r")
+    targets = np.load(root / "targets.npy", mmap_mode="r")
+    validity = np.load(root / "validity.npy", mmap_mode="r")
+    market = np.load(root / "market.npy", mmap_mode="r")
+    row_count = features.shape[0]
+    expected_shapes = {
+        "features.npy": (row_count, len(metadata.feature_columns)),
+        "targets.npy": (row_count, 1),
+        "validity.npy": (row_count, 2),
+        "market.npy": (row_count, 4),
+    }
+    arrays = {"features.npy": features, "targets.npy": targets, "validity.npy": validity, "market.npy": market}
+    for name, array in arrays.items():
+        if array.shape != expected_shapes[name]:
+            raise ValueError(f"invalid {name} shape: {array.shape}")
+    if features.dtype.name != metadata.feature_dtype or targets.dtype.name != metadata.target_dtype:
+        raise ValueError("array dtype does not match dataset metadata")
+    if validity.dtype != np.bool_ or market.dtype != np.float32:
+        raise ValueError("validity.npy must be bool and market.npy must be float32")
+
+    rows = pl.read_parquet(root / "rows.parquet")
+    _validate_rows(rows, row_count)
     fold_dirs = sorted(path for path in (root / "folds").glob("fold_*") if path.is_dir())
     if not fold_dirs:
         raise ValueError("dataset package contains no fold indexes")
-    referenced_sessions: set[Path] = set()
-    maximum_anchor: dict[Path, int] = {}
-    references: dict[Path, list[tuple[int, str, str, datetime]]] = {}
     for fold_dir in fold_dirs:
         expected = {fold_dir / f"{split}.parquet" for split in ("train", "validation", "test")}
-        actual = set(fold_dir.glob("*.parquet"))
-        if actual != expected:
-            raise ValueError(f"fold is missing a required split: {fold_dir.name}")
-        for index_path in sorted(expected):
+        if set(fold_dir.glob("*.parquet")) != expected:
+            raise ValueError(f"fold must contain exactly train/validation/test: {fold_dir.name}")
+        for index_path in expected:
             frame = pl.read_parquet(index_path)
             validate_fold_index(frame)
-            for relative, anchor_index, trade_date, session_id, anchor_timestamp in frame.select(
-                "session_file", "anchor_index", "trade_date", "session_id", "anchor_timestamp"
-            ).iter_rows():
-                session_path = (root / relative).resolve()
-                if not session_path.is_relative_to(root) or not session_path.is_file():
-                    raise ValueError(f"fold index references missing session: {relative}")
-                referenced_sessions.add(session_path)
-                maximum_anchor[session_path] = max(
-                    maximum_anchor.get(session_path, -1), anchor_index
-                )
-                references.setdefault(session_path, []).append(
-                    (anchor_index, trade_date, session_id, anchor_timestamp)
-                )
-
-    for session_path in referenced_sessions:
-        payload = torch.load(session_path, map_location="cpu", weights_only=True)
-        validated = validate_session_payload(
-            payload,
-            feature_count=len(metadata.feature_columns),
-            feature_dtype=metadata.feature_dtype,
-            target_dtype=metadata.target_dtype,
-        )
-        features = cast(torch.Tensor, validated["features"])
-        if maximum_anchor[session_path] >= features.shape[0]:
-            raise ValueError(f"fold index anchor exceeds session rows: {session_path.name}")
-        timestamps = cast(list[str] | tuple[str, ...], validated["timestamps"])
-        for anchor, trade_date, session_id, anchor_timestamp in references[session_path]:
-            if anchor < metadata.history_snapshots - 1:
-                raise ValueError("fold index anchor cannot provide a complete history window")
-            if trade_date != validated["trade_date"] or session_id != validated["session_id"]:
-                raise ValueError("fold index sample identity does not match its session")
-            if datetime.fromisoformat(timestamps[anchor]) != anchor_timestamp:
-                raise ValueError("fold index anchor timestamp does not match its session")
+            _validate_fold_references(frame, rows, validity, row_count, metadata.history_snapshots)
     return metadata
+
+
+def _read_metadata(path: Path) -> DatasetPackageMetadata:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError("dataset.json is not valid UTF-8 JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError("dataset.json root must be an object")
+    return DatasetPackageMetadata.from_dict(value)
+
+
+def _validate_rows(rows: pl.DataFrame, row_count: int) -> None:
+    if tuple(rows.columns) != _ROW_COLUMNS or any(
+        rows.schema[name] != dtype for name, dtype in _ROW_SCHEMA.items()
+    ):
+        raise ValueError("rows.parquet has an invalid schema")
+    if rows.height != row_count or rows.get_column("global_index").to_list() != list(range(row_count)):
+        raise ValueError("rows.parquet must cover every global row exactly once")
+
+
+def _validate_fold_references(
+    frame: pl.DataFrame,
+    rows: pl.DataFrame,
+    validity: np.ndarray,
+    row_count: int,
+    history_snapshots: int,
+) -> None:
+    invalid = frame.filter(
+        (pl.col("global_anchor_index") >= row_count)
+        | (pl.col("global_anchor_index") - pl.col("session_start_index") != pl.col("anchor_index"))
+        | (pl.col("anchor_index") < history_snapshots - 1)
+    )
+    if not invalid.is_empty():
+        raise ValueError("fold index contains an invalid global or session-local anchor")
+    for anchor in frame.get_column("global_anchor_index"):
+        start = anchor - history_snapshots + 1
+        if not validity[start : anchor + 1, 0].all() or not validity[anchor, 1]:
+            raise ValueError("fold index references an invalid sample window")
+    referenced = frame.join(
+        rows,
+        left_on="global_anchor_index",
+        right_on="global_index",
+        suffix="_row",
+    )
+    mismatch = referenced.filter(
+        (pl.col("trade_date") != pl.col("trade_date_row"))
+        | (pl.col("session_id") != pl.col("session_id_row"))
+        | (pl.col("anchor_timestamp") != pl.col("timestamp"))
+    )
+    if referenced.height != frame.height or not mismatch.is_empty():
+        raise ValueError("fold index metadata does not match rows.parquet")
