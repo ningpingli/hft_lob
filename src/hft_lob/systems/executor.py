@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-from lightning.pytorch.callbacks import ModelCheckpoint
+import lightning as L
+from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
+from lightning.pytorch.loggers import Logger
 
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ModelRunConfig
@@ -17,13 +19,6 @@ from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.walk_forward import CandidateFoldRun
-from hft_lob.train import (
-    build_checkpoint_callback,
-    build_early_stopping_callback,
-    build_trainer,
-    run_test,
-    run_training,
-)
 
 
 @dataclass(frozen=True)
@@ -43,11 +38,7 @@ class DefaultWalkForwardExecutor:
         candidate_name: str,
     ) -> CandidateFoldRun:
         metadata = package.metadata
-        output_dir = (
-            Path(self.output_root)
-            / f"fold_{fold_index:03d}"
-            / candidate_name
-        )
+        output_dir = Path(self.output_root) / f"fold_{fold_index:03d}" / candidate_name
         output_dir.mkdir(parents=True, exist_ok=True)
         datamodule = LOBDataModule(
             package,
@@ -150,11 +141,7 @@ class DefaultWalkForwardExecutor:
             dataset_version=metadata.dataset_id,
             fold_index=fold_index,
         )
-        runner.fit(
-            lambda: (
-                cast(LOBBatch, batch) for batch in datamodule.train_dataloader()
-            )
-        )
+        runner.fit(lambda: (cast(LOBBatch, batch) for batch in datamodule.train_dataloader()))
         datamodule.teardown("fit")
         datamodule.setup("test")
         artifact = runner.predict(
@@ -163,3 +150,135 @@ class DefaultWalkForwardExecutor:
         )
         datamodule.teardown("test")
         return artifact
+
+
+def build_checkpoint_callback(
+    log_dir: str,
+    *,
+    monitor: str,
+    mode: str,
+    save_top_k: int = 1,
+    filename: str = "best_val_model",
+) -> Callback:
+    """构建单 fold 最佳模型检查点回调。"""
+    _validate_monitor_mode(mode)
+    if not log_dir.strip():
+        raise ValueError("log_dir must not be empty")
+    if save_top_k < -1:
+        raise ValueError("save_top_k must be >= -1")
+    if not filename.strip():
+        raise ValueError("filename must not be empty")
+    Path(log_dir).expanduser().mkdir(parents=True, exist_ok=True)
+    return ModelCheckpoint(
+        dirpath=str(Path(log_dir).expanduser()),
+        filename=filename,
+        monitor=monitor,
+        mode=mode,
+        save_top_k=save_top_k,
+        save_weights_only=False,
+        auto_insert_metric_name=False,
+    )
+
+
+def build_early_stopping_callback(
+    *,
+    monitor: str,
+    mode: str,
+    patience: int = 20,
+    min_delta: float = 0.001,
+    check_finite: bool = False,
+) -> Callback:
+    """构建单 fold 早停回调。"""
+    _validate_monitor_mode(mode)
+    if not monitor.strip():
+        raise ValueError("monitor must not be empty")
+    if patience < 0:
+        raise ValueError("patience must be >= 0")
+    if min_delta < 0:
+        raise ValueError("min_delta must be >= 0")
+    return EarlyStopping(
+        monitor=monitor,
+        mode=mode,
+        patience=patience,
+        min_delta=min_delta,
+        check_finite=check_finite,
+    )
+
+
+def build_trainer(
+    log_dir: str,
+    epochs: int,
+    patience: int,
+    callbacks: list[Callback] | None = None,
+    logger: Logger | None = None,
+    accelerator: str = "auto",
+    devices: int | list[int] | str = 1,
+    precision: str = "32-true",
+    gradient_clip_val: float | None = None,
+    **kwargs: Any,
+) -> L.Trainer:
+    """构建 executor 使用的 Lightning Trainer。"""
+    if epochs <= 0:
+        raise ValueError("epochs must be > 0")
+    if patience < 0:
+        raise ValueError("patience must be >= 0")
+    if gradient_clip_val is not None and gradient_clip_val < 0:
+        raise ValueError("gradient_clip_val must be >= 0")
+    configured_callbacks = list(callbacks or [])
+    if not any(isinstance(callback, ModelCheckpoint) for callback in configured_callbacks):
+        configured_callbacks.append(
+            build_checkpoint_callback(log_dir, monitor="val/ts_ic", mode="max")
+        )
+    if not any(isinstance(callback, EarlyStopping) for callback in configured_callbacks):
+        configured_callbacks.append(
+            build_early_stopping_callback(monitor="val/ts_ic", mode="max", patience=patience)
+        )
+    trainer_kwargs: dict[str, Any] = {
+        "default_root_dir": str(Path(log_dir).expanduser()),
+        "max_epochs": epochs,
+        "callbacks": configured_callbacks,
+        "logger": logger if logger is not None else False,
+        "accelerator": accelerator,
+        "devices": devices,
+        "precision": precision,
+        "deterministic": True,
+        **kwargs,
+    }
+    if gradient_clip_val is not None:
+        trainer_kwargs["gradient_clip_val"] = gradient_clip_val
+    return L.Trainer(**trainer_kwargs)
+
+
+def run_training(
+    trainer: L.Trainer,
+    lightning_module: L.LightningModule,
+    datamodule: LOBDataModule,
+    ckpt_path: str | None = None,
+) -> None:
+    """执行单 fold 模型训练。"""
+    if ckpt_path is not None and not ckpt_path.strip():
+        raise ValueError("ckpt_path must be None or a non-empty path")
+    trainer.fit(model=lightning_module, datamodule=datamodule, ckpt_path=ckpt_path)
+
+
+def run_test(
+    trainer: L.Trainer,
+    lightning_module: L.LightningModule,
+    datamodule: LOBDataModule,
+    ckpt_path: str,
+) -> PredictionArtifact:
+    """恢复最佳检查点并返回 test split 的预测产物。"""
+    if not ckpt_path.strip():
+        raise ValueError("ckpt_path must not be empty")
+    trainer.test(model=lightning_module, datamodule=datamodule, ckpt_path=ckpt_path)
+    artifact = getattr(lightning_module, "test_artifact", None)
+    if not isinstance(artifact, PredictionArtifact):
+        raise RuntimeError("test completed without a PredictionArtifact")
+    if artifact.split != "test":
+        raise RuntimeError("test artifact split must be 'test'")
+    return artifact
+
+
+def _validate_monitor_mode(mode: str) -> None:
+    if mode not in {"min", "max"}:
+        raise ValueError("mode must be 'min' or 'max'")

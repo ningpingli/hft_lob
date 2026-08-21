@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
-from hft_lob import train
 from hft_lob.datasets.contracts import SampleMeta
+from hft_lob.systems import executor as train
 from hft_lob.systems.artifact import PredictionArtifact
 
 
@@ -23,6 +23,7 @@ class FakeTrainer:
 
     def test(self, **kwargs: Any) -> None:
         self.calls.append(("test", kwargs))
+
 
 def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
     metadata = tuple(
@@ -54,9 +55,7 @@ def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
 
 
 def test_callback_factories(tmp_path: Path) -> None:
-    checkpoint = train.build_checkpoint_callback(
-        str(tmp_path), monitor="val/ts_ic", mode="max"
-    )
+    checkpoint = train.build_checkpoint_callback(str(tmp_path), monitor="val/ts_ic", mode="max")
     early_stopping = train.build_early_stopping_callback(
         monitor="val/ts_ic", mode="max", patience=3
     )
@@ -103,7 +102,10 @@ def test_run_test_returns_module_artifact() -> None:
     module = SimpleNamespace(test_artifact=_artifact())
 
     artifact = train.run_test(
-        trainer, module, SimpleNamespace(), "best.ckpt"  # type: ignore[arg-type]
+        trainer,
+        module,
+        SimpleNamespace(),
+        "best.ckpt",  # type: ignore[arg-type]
     )
 
     assert artifact.predictions.shape == (2,)
