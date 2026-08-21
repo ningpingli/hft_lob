@@ -3,33 +3,30 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Self, cast
 
 import torch
-from torch import nn
+
+from hft_lob.baselines.base import ValidatedBaseline
 
 
-class ZeroBaseline(nn.Module):
+class ZeroBaseline(ValidatedBaseline):
     """Baseline 0：对每个样本恒定预测零收益。"""
 
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:
-        """无参数拟合，返回自身。"""
-        _validate_xy(x, y)
-        return self
+    def _fit_validated(self, features: torch.Tensor, targets: torch.Tensor) -> None:
+        return None
 
-    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
-        for x, y in batches():
-            _validate_xy(x, y)
-            return self
-        raise ValueError("training batches must not be empty")
+    def _fit_batches_validated(
+        self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]
+    ) -> None:
+        for _features, _targets in batches():
+            return
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward_validated(self, features: torch.Tensor) -> torch.Tensor:
         """返回形状为 ``[B, 1]`` 的全零预测。"""
-        _validate_x(x)
-        return x.new_zeros((x.shape[0], 1))
+        return features.new_zeros((features.shape[0], 1))
 
 
-class ImbalanceBaseline(nn.Module):
+class ImbalanceBaseline(ValidatedBaseline):
     """Baseline 1：使用 anchor 快照盘口不平衡度预测收益。
 
     ``bid_volume_indices`` / ``ask_volume_indices`` 显式注入，避免模型依赖
@@ -60,9 +57,8 @@ class ImbalanceBaseline(nn.Module):
         self.register_buffer("intercept", torch.zeros(1))
         self.register_buffer("fitted", torch.tensor(False))
 
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:
+    def _fit_validated(self, features: torch.Tensor, targets: torch.Tensor) -> None:
         """在训练段拟合 imbalance 到收益的线性映射。"""
-        features, targets = _validate_xy(x, y)
         imbalance = self._imbalance(features)
         mean_x = imbalance.mean()
         mean_y = targets.mean()
@@ -75,16 +71,16 @@ class ImbalanceBaseline(nn.Module):
         self.slope.copy_(slope.reshape(1))
         self.intercept.copy_((mean_y - slope * mean_x).reshape(1))
         self.fitted.fill_(True)
-        return self
 
-    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+    def _fit_batches_validated(
+        self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]
+    ) -> None:
         count = 0
         sum_x = torch.zeros((), dtype=torch.float64)
         sum_y = torch.zeros((), dtype=torch.float64)
         sum_xx = torch.zeros((), dtype=torch.float64)
         sum_xy = torch.zeros((), dtype=torch.float64)
-        for x, y in batches():
-            features, targets = _validate_xy(x, y)
+        for features, targets in batches():
             imbalance = self._imbalance(features).to(torch.float64)
             targets = targets.to(torch.float64)
             count += targets.numel()
@@ -92,19 +88,19 @@ class ImbalanceBaseline(nn.Module):
             sum_y += targets.sum()
             sum_xx += imbalance.square().sum()
             sum_xy += (imbalance * targets).sum()
-        if count == 0:
-            raise ValueError("training batches must not be empty")
         denominator = sum_xx - sum_x.square() / count
-        slope = (sum_xy - sum_x * sum_y / count) / denominator if denominator > 0 else denominator.new_zeros(())
+        slope = (
+            (sum_xy - sum_x * sum_y / count) / denominator
+            if denominator > 0
+            else denominator.new_zeros(())
+        )
         intercept = sum_y / count - slope * sum_x / count
         self.slope.copy_(slope.to(self.slope).reshape(1))
         self.intercept.copy_(intercept.to(self.intercept).reshape(1))
         self.fitted.fill_(True)
-        return self
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward_validated(self, features: torch.Tensor) -> torch.Tensor:
         """使用 anchor 帧不平衡度返回 ``[B, 1]`` 预测。"""
-        features = _validate_x(x)
         if not bool(self.fitted.item()):
             raise RuntimeError("ImbalanceBaseline must be fitted before prediction")
         return self._imbalance(features).mul(self.slope).add(self.intercept).unsqueeze(1)
@@ -120,7 +116,7 @@ class ImbalanceBaseline(nn.Module):
         return torch.where(total.abs() > torch.finfo(x.dtype).eps, (bid - ask) / total, 0.0)
 
 
-class RidgeBaseline(nn.Module):
+class RidgeBaseline(ValidatedBaseline):
     """Baseline 2：基于窗口特征的 Ridge 回归。
 
     窗口展平策略属于模型内部；``fit`` 只能使用训练段，拟合参数作为 module
@@ -130,10 +126,11 @@ class RidgeBaseline(nn.Module):
     weight: torch.Tensor
     intercept: torch.Tensor
     fitted: torch.Tensor
+    num_features: int
+    history_snapshots: int
 
     def __init__(self, *, num_features: int, history_snapshots: int, alpha: float = 1.0) -> None:
-        super().__init__()
-        _validate_dimensions(num_features, history_snapshots)
+        super().__init__(num_features=num_features, history_snapshots=history_snapshots)
         if alpha < 0:
             raise ValueError("alpha must be >= 0")
         self.num_features = num_features
@@ -143,9 +140,8 @@ class RidgeBaseline(nn.Module):
         self.register_buffer("intercept", torch.zeros(1))
         self.register_buffer("fitted", torch.tensor(False))
 
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:
+    def _fit_validated(self, features: torch.Tensor, targets: torch.Tensor) -> None:
         """拟合带 L2 正则的线性回归。"""
-        features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
         design = features.reshape(features.shape[0], -1).to(torch.float64)
         response = targets.to(torch.float64)
         mean_x = design.mean(dim=0, keepdim=True)
@@ -169,17 +165,17 @@ class RidgeBaseline(nn.Module):
         self.weight.copy_(weight.to(self.weight))
         self.intercept.copy_(intercept.reshape(1).to(self.intercept))
         self.fitted.fill_(True)
-        return self
 
-    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+    def _fit_batches_validated(
+        self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]
+    ) -> None:
         dimension = self.num_features * self.history_snapshots
         count = 0
         sum_x = torch.zeros(dimension, dtype=torch.float64)
         sum_y = torch.zeros((), dtype=torch.float64)
         xtx = torch.zeros((dimension, dimension), dtype=torch.float64)
         xty = torch.zeros((dimension, 1), dtype=torch.float64)
-        for x, y in batches():
-            features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
+        for features, targets in batches():
             design = features.reshape(features.shape[0], -1).to(torch.float64)
             response = targets.to(torch.float64)
             count += response.numel()
@@ -187,8 +183,6 @@ class RidgeBaseline(nn.Module):
             sum_y += response.sum()
             xtx += design.T @ design
             xty += design.T @ response.unsqueeze(1)
-        if count == 0:
-            raise ValueError("training batches must not be empty")
         mean_x = sum_x / count
         mean_y = sum_y / count
         gram = xtx - sum_x.unsqueeze(1) @ sum_x.unsqueeze(0) / count
@@ -202,127 +196,9 @@ class RidgeBaseline(nn.Module):
         self.weight.copy_(weight.to(self.weight))
         self.intercept.copy_(intercept.to(self.intercept).reshape(1))
         self.fitted.fill_(True)
-        return self
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _forward_validated(self, features: torch.Tensor) -> torch.Tensor:
         """返回 ``[B, 1]`` Ridge 预测。"""
-        features = _validate_x(x, self.num_features, self.history_snapshots)
         if not bool(self.fitted.item()):
             raise RuntimeError("RidgeBaseline must be fitted before prediction")
         return features.reshape(features.shape[0], -1) @ self.weight + self.intercept
-
-
-class MLPBaseline(nn.Module):
-    """Baseline 3：展平历史窗口后的轻量 MLP 回归模型。"""
-
-    fitted: torch.Tensor
-
-    def __init__(
-        self,
-        *,
-        num_features: int,
-        history_snapshots: int,
-        hidden_dim: int = 64,
-        dropout: float = 0.1,
-        epochs: int = 50,
-        learning_rate: float = 1e-3,
-    ) -> None:
-        super().__init__()
-        _validate_dimensions(num_features, history_snapshots)
-        if hidden_dim <= 0 or epochs <= 0 or learning_rate <= 0:
-            raise ValueError("hidden_dim, epochs and learning_rate must be > 0")
-        if not 0 <= dropout < 1:
-            raise ValueError("dropout must be in [0, 1)")
-        self.num_features = num_features
-        self.history_snapshots = history_snapshots
-        self.epochs = epochs
-        self.learning_rate = learning_rate
-        self.network = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(num_features * history_snapshots, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1),
-        )
-        self.register_buffer("fitted", torch.tensor(False))
-
-    def fit(self, x: torch.Tensor, y: torch.Tensor) -> Self:
-        """仅使用当前 fold training split 拟合 MLP。"""
-        features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
-        self.train()
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
-        loss_fn = nn.HuberLoss()
-        for _ in range(self.epochs):
-            optimizer.zero_grad(set_to_none=True)
-            loss = loss_fn(self.network(features), targets.unsqueeze(1))
-            loss.backward()
-            optimizer.step()
-        self.fitted.fill_(True)
-        self.eval()
-        return self
-
-    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
-        self.train()
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
-        loss_fn = nn.HuberLoss()
-        seen = False
-        for _ in range(self.epochs):
-            for x, y in batches():
-                features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
-                seen = True
-                optimizer.zero_grad(set_to_none=True)
-                loss = loss_fn(self.network(features), targets.unsqueeze(1))
-                loss.backward()
-                optimizer.step()
-        if not seen:
-            raise ValueError("training batches must not be empty")
-        self.fitted.fill_(True)
-        self.eval()
-        return self
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """返回严格 ``[B, 1]`` 的预测。"""
-        features = _validate_x(x, self.num_features, self.history_snapshots)
-        if not bool(self.fitted.item()):
-            raise RuntimeError("MLPBaseline must be fitted before prediction")
-        return cast(torch.Tensor, self.network(features))
-
-
-def _validate_dimensions(num_features: int, history_snapshots: int) -> None:
-    if num_features <= 0 or history_snapshots <= 0:
-        raise ValueError("num_features and history_snapshots must be > 0")
-
-
-def _validate_x(
-    x: torch.Tensor,
-    num_features: int | None = None,
-    history_snapshots: int | None = None,
-) -> torch.Tensor:
-    if not x.is_floating_point() or x.ndim != 3:
-        raise ValueError(f"x must be a floating tensor with shape [B,T,F], got {tuple(x.shape)}")
-    if x.shape[0] == 0 or x.shape[1] == 0 or x.shape[2] == 0:
-        raise ValueError("x dimensions must be non-empty")
-    if num_features is not None and x.shape[2] != num_features:
-        raise ValueError(f"expected {num_features} features, got {x.shape[2]}")
-    if history_snapshots is not None and x.shape[1] != history_snapshots:
-        raise ValueError(f"expected {history_snapshots} snapshots, got {x.shape[1]}")
-    if not torch.isfinite(x).all():
-        raise ValueError("x must contain only finite values")
-    return x
-
-
-def _validate_xy(
-    x: torch.Tensor,
-    y: torch.Tensor,
-    num_features: int | None = None,
-    history_snapshots: int | None = None,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    features = _validate_x(x, num_features, history_snapshots)
-    if not y.is_floating_point() or y.ndim not in (1, 2):
-        raise ValueError("y must be a floating tensor with shape [B] or [B,1]")
-    targets = y[:, 0] if y.ndim == 2 and y.shape[1] == 1 else y
-    if targets.ndim != 1 or targets.shape[0] != features.shape[0]:
-        raise ValueError("x and y must have matching batch sizes and y shape [B] or [B,1]")
-    if not torch.isfinite(targets).all():
-        raise ValueError("y must contain only finite values")
-    return features, targets

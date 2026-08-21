@@ -10,10 +10,8 @@ model:
   output_dim: 1
 
 baselines:
-  names: [zero, imbalance, ridge, mlp]
+  names: [zero, imbalance, ridge]
   ridge_alpha: 1.0
-  mlp_hidden_dim: 64
-  mlp_dropout: 0.1
 
 training:
   loss: huber

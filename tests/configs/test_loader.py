@@ -15,7 +15,7 @@ def test_loads_two_stage_repository_configs() -> None:
     assert data.sessions.morning == ("09:30:00", "11:30:00")
     assert model.experiment_id == "loader-test"
     assert model.training.betas == (0.9, 0.95)
-    assert model.baselines.names == ("zero", "imbalance", "ridge", "mlp")
+    assert model.baselines.names == ("zero", "imbalance", "ridge")
 
 
 def test_rejects_unknown_config_fields(tmp_path: Path) -> None:

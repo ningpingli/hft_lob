@@ -5,19 +5,16 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 
-import torch
-
 from hft_lob.baselines.base import BaselineModel
 from hft_lob.baselines.models import (
     ImbalanceBaseline,
-    MLPBaseline,
     RidgeBaseline,
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
 from hft_lob.configs.experiment import ModelRunConfig
 
-BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
+BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge")
 
 
 def build_baseline(
@@ -30,7 +27,7 @@ def build_baseline(
     """按实验配置构建 baseline。
 
     Args:
-        name: ``zero`` / ``imbalance`` / ``ridge`` / ``mlp``。
+        name: ``zero`` / ``imbalance`` / ``ridge``。
         config: 特征数、窗口长度及 baseline 参数的唯一来源。
         feature_columns: PreparedDataset 产出的唯一特征 schema。
 
@@ -63,16 +60,7 @@ def build_baseline(
             history_snapshots=history,
             alpha=config.baselines.ridge_alpha,
         )
-    with torch.random.fork_rng():
-        torch.manual_seed(config.seed)
-        return MLPBaseline(
-            num_features=num_features,
-            history_snapshots=history,
-            hidden_dim=config.baselines.mlp_hidden_dim,
-            dropout=config.baselines.mlp_dropout,
-            epochs=config.training.epochs,
-            learning_rate=config.training.learning_rate,
-        )
+    raise AssertionError("unreachable baseline branch")
 
 
 def volume_feature_indices(
@@ -92,8 +80,7 @@ def volume_feature_indices(
     if not levels:
         raise ValueError("feature schema contains no BID/ASK volume columns")
     incomplete = [
-        level for level in levels
-        if level not in by_side["BID"] or level not in by_side["ASK"]
+        level for level in levels if level not in by_side["BID"] or level not in by_side["ASK"]
     ]
     if incomplete:
         raise ValueError(f"bid/ask volume columns must be paired by level: {incomplete}")
@@ -108,7 +95,6 @@ __all__ = [
     "BaselineModel",
     "BaselineRunner",
     "ImbalanceBaseline",
-    "MLPBaseline",
     "RidgeBaseline",
     "ZeroBaseline",
     "build_baseline",

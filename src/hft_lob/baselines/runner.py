@@ -23,9 +23,7 @@ class BaselineRunner:
 
     def fit(self, batches: Callable[[], Iterable[LOBBatch]]) -> None:
         """流式拟合；模型可为多个 epoch 重建 DataLoader 迭代器。"""
-        self.model.fit_batches(
-            lambda: ((batch.features, batch.targets) for batch in batches())
-        )
+        self.model.fit_batches(lambda: ((batch.features, batch.targets) for batch in batches()))
 
     def predict(self, batches: Iterable[LOBBatch], *, split: str) -> PredictionArtifact:
         """逐 batch 推理，仅累积最终预测、目标和必要 metadata。"""
@@ -62,7 +60,9 @@ class BaselineRunner:
 def _validate_batch(batch: LOBBatch) -> None:
     if batch.features.ndim != 3 or batch.targets.ndim != 2 or batch.targets.shape[1] != 1:
         raise ValueError("batches must follow [B,T,F] features and [B,1] targets")
-    if batch.features.shape[0] != batch.targets.shape[0] or batch.features.shape[0] != len(batch.metadata):
+    if batch.features.shape[0] != batch.targets.shape[0] or batch.features.shape[0] != len(
+        batch.metadata
+    ):
         raise ValueError("batch features, targets and metadata counts must match")
     if not torch.isfinite(batch.features).all() or not torch.isfinite(batch.targets).all():
         raise ValueError("batch features and targets must be finite")

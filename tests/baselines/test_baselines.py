@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
-from hft_lob.baselines import volume_feature_indices
+from hft_lob.baselines import build_baseline, volume_feature_indices
 from hft_lob.baselines.models import (
     ImbalanceBaseline,
-    MLPBaseline,
     RidgeBaseline,
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
+from hft_lob.configs.experiment import (
+    BaselineConfig,
+    EvaluationConfig,
+    FoldSelectionConfig,
+    LoaderConfig,
+    ModelConfig,
+    ModelRunConfig,
+    TrainingConfig,
+)
 from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 
 
@@ -49,6 +58,7 @@ def test_streaming_statistics_match_single_batch_fit() -> None:
     torch.manual_seed(8)
     x = torch.randn(12, 2, 3)
     y = x.reshape(12, 6).sum(dim=1, keepdim=True)
+
     def batches():  # type: ignore[no-untyped-def]
         return iter(((x[:5], y[:5]), (x[5:], y[5:])))
 
@@ -57,27 +67,12 @@ def test_streaming_statistics_match_single_batch_fit() -> None:
     streamed_ridge.fit_batches(batches)
     torch.testing.assert_close(streamed_ridge(x), expected_ridge(x), atol=1e-5, rtol=1e-5)
 
-    expected_imbalance = ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,)).fit(x, y)
+    expected_imbalance = ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,)).fit(
+        x, y
+    )
     streamed_imbalance = ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,))
     streamed_imbalance.fit_batches(batches)
     torch.testing.assert_close(streamed_imbalance(x), expected_imbalance(x), atol=1e-5, rtol=1e-5)
-
-
-def test_mlp_fit_switches_to_deterministic_evaluation() -> None:
-    torch.manual_seed(3)
-    x = torch.randn(8, 2, 3)
-    y = x.mean(dim=(1, 2), keepdim=False).unsqueeze(1)
-    model = MLPBaseline(
-        num_features=3,
-        history_snapshots=2,
-        hidden_dim=4,
-        dropout=0.5,
-        epochs=2,
-    ).fit(x, y)
-
-    assert model(x).shape == (8, 1)
-    torch.testing.assert_close(model(x), model(x))
-    assert not model.training
 
 
 def test_volume_indices_follow_level_order() -> None:
@@ -115,3 +110,33 @@ def test_runner_builds_prediction_artifact() -> None:
     assert artifact.model_name == "zero"
     assert artifact.predictions.tolist() == [0.0, 0.0]
     assert artifact.targets.tolist() == targets[:, 0].tolist()
+
+
+def test_all_baselines_reject_empty_training_batches() -> None:
+    models = (
+        ZeroBaseline(),
+        ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,)),
+        RidgeBaseline(num_features=2, history_snapshots=3),
+    )
+    for model in models:
+        with pytest.raises(ValueError, match="must not be empty"):
+            model.fit_batches(lambda: iter(()))
+
+
+def test_factory_rejects_removed_mlp_baseline() -> None:
+    config = ModelRunConfig(
+        experiment_id="baseline-test",
+        loader=LoaderConfig(),
+        model=ModelConfig(),
+        baselines=BaselineConfig(),
+        training=TrainingConfig(),
+        evaluation=EvaluationConfig(),
+        folds=FoldSelectionConfig(),
+    )
+    with pytest.raises(ValueError, match="unsupported baseline"):
+        build_baseline(
+            "mlp",
+            config,
+            feature_columns=("BIDs1", "ASKs1"),
+            history_snapshots=3,
+        )

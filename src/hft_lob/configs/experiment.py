@@ -125,12 +125,10 @@ class ModelConfig:
 
 @dataclass(frozen=True)
 class BaselineConfig:
-    """MVP 基线（§17）：Zero / Imbalance / Ridge / 轻量 MLP。"""
+    """MVP 基线（§17）：Zero / Imbalance / Ridge。"""
 
-    names: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
+    names: tuple[str, ...] = ("zero", "imbalance", "ridge")
     ridge_alpha: float = 1.0
-    mlp_hidden_dim: int = 64
-    mlp_dropout: float = 0.1
 
 
 @dataclass(frozen=True)

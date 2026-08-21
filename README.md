@@ -93,7 +93,7 @@ model:
   output_dim: 1
 
 baselines:
-  names: [zero, imbalance, ridge, mlp]
+  names: [zero, imbalance, ridge]
 ```
 
 一次 walk-forward 会执行 `model.name + baselines.names`。仅调试主模型时可关闭
