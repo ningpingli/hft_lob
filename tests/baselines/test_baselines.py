@@ -19,7 +19,7 @@ from hft_lob.configs.experiment import (
     ModelRunConfig,
     TrainingConfig,
 )
-from hft_lob.datasets.contracts import LOBBatch, SampleMeta
+from hft_lob.systems.contracts import LOBBatch, SampleMeta
 
 
 def test_zero_baseline_preserves_batch_contract() -> None:

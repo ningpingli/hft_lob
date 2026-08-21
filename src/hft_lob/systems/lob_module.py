@@ -10,8 +10,8 @@ import torch
 from torch import nn
 
 from hft_lob.configs.experiment import ModelRunConfig
-from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.losses import build_loss
 from hft_lob.systems.metrics import evaluate
 

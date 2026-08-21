@@ -33,7 +33,7 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
 
     # GPU 可见设备设置完成后再导入 Torch/Lightning 依赖链。
     from hft_lob.configs import load_model_config
-    from hft_lob.datasets.validation import open_dataset_package
+    from hft_lob.datasets.dataset_validator import open_dataset_package
     from hft_lob.systems.executor import DefaultWalkForwardExecutor
     from hft_lob.systems.walk_forward import run_walk_forward
     from hft_lob.utils.checkpoint_utils import backup_experiment_config

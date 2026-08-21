@@ -8,7 +8,7 @@ from collections.abc import Sequence
 
 from hft_lob.configs import load_data_config
 from hft_lob.datasets.builder import build_dataset_package
-from hft_lob.datasets.validation import validate_dataset_package
+from hft_lob.datasets.dataset_validator import validate_dataset_package
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

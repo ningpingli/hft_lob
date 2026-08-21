@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
-from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.systems import executor as train
 from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.contracts import SampleMeta
 
 
 class FakeTrainer:

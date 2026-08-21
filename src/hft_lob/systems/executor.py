@@ -12,10 +12,10 @@ from lightning.pytorch.loggers import Logger
 
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ModelRunConfig
-from hft_lob.datasets.contracts import LOBBatch
-from hft_lob.datasets.package import DatasetPackage, DatasetPackageMetadata
+from hft_lob.datasets.dataset_validator import DatasetPackage, DatasetPackageMetadata
 from hft_lob.models import build_model
 from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.contracts import LOBBatch
 from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.walk_forward import CandidateFoldRun

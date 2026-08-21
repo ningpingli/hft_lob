@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.contracts import SampleMeta
 from hft_lob.systems.metrics import (
     block_bootstrap_confidence_interval,
     build_evaluation_report,
