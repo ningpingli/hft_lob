@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import LoaderConfig
-from hft_lob.datasets.lob_dataset import LOBBatch, SampleMeta
+from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.datasets.prebuilt_dataset import PrebuiltLOBDataset
 from hft_lob.datasets.validation import validate_dataset_package
 

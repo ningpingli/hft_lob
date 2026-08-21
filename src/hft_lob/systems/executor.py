@@ -10,7 +10,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ExperimentConfig
-from hft_lob.datasets.lob_dataset import LOBBatch
+from hft_lob.datasets.contracts import LOBBatch
 from hft_lob.datasets.package import DatasetPackageMetadata
 from hft_lob.models import build_model
 from hft_lob.systems.artifact import PredictionArtifact
@@ -70,7 +70,7 @@ class DefaultWalkForwardExecutor:
             )
             return CandidateFoldRun(
                 artifact=artifact,
-                standardizer_state_path=state_path,
+                dataset_metadata_path=state_path,
                 predictions_path=predictions_path,
             )
 
@@ -119,7 +119,7 @@ class DefaultWalkForwardExecutor:
         )
         return CandidateFoldRun(
             artifact=artifact,
-            standardizer_state_path=state_path,
+            dataset_metadata_path=state_path,
             checkpoint_path=str(Path(checkpoint_path).resolve()),
             predictions_path=predictions_path,
         )
@@ -135,10 +135,6 @@ class DefaultWalkForwardExecutor:
         fold_index: int,
     ) -> PredictionArtifact:
         datamodule.setup("fit")
-        training_batches = tuple(
-            cast(LOBBatch, batch) for batch in datamodule.train_dataloader()
-        )
-        datamodule.teardown("fit")
         runner = BaselineRunner(
             name=candidate_name,
             model=build_baseline(
@@ -150,10 +146,16 @@ class DefaultWalkForwardExecutor:
             dataset_version=metadata.dataset_id,
             fold_index=fold_index,
         )
-        runner.fit(training_batches)
+        runner.fit(
+            lambda: (
+                cast(LOBBatch, batch) for batch in datamodule.train_dataloader()
+            )
+        )
+        datamodule.teardown("fit")
         datamodule.setup("predict")
-        test_batches = tuple(
-            cast(LOBBatch, batch) for batch in datamodule.predict_dataloader()
+        artifact = runner.predict(
+            (cast(LOBBatch, batch) for batch in datamodule.predict_dataloader()),
+            split="test",
         )
         datamodule.teardown("predict")
-        return runner.predict(test_batches, split="test")
+        return artifact

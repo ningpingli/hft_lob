@@ -34,7 +34,7 @@ from hft_lob.systems.lob_data_module import LOBDataModule, _seed_worker
 from hft_lob.utils.seed import set_seed
 
 
-class RandomizedLOBWindowDataset(PrebuiltLOBDataset):
+class RandomizedPrebuiltDataset(PrebuiltLOBDataset):
     """测试专用包装：让每个 worker 同时消费三套随机流。"""
 
     def __getitem__(self, index: int):  # type: ignore[no-untyped-def]
@@ -91,7 +91,7 @@ def _load_once(config: ExperimentConfig, dataset_dir: Path) -> tuple[torch.Tenso
     module = LOBDataModule(
         dataset_dir, fold_index=1, loader=config.loader, seed=config.seed
     )
-    dataset = RandomizedLOBWindowDataset(
+    dataset = RandomizedPrebuiltDataset(
         dataset_dir,
         metadata,
         fold_index=1,

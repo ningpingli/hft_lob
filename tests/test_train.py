@@ -11,7 +11,7 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 from hft_lob import train
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.datasets.lob_dataset import SampleMeta
+from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
 
 

@@ -11,7 +11,7 @@ import polars as pl
 import torch
 from torch.utils.data import Dataset
 
-from hft_lob.datasets.lob_dataset import SampleMeta
+from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.datasets.package import DatasetPackageMetadata, fold_index_path
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from typing import Self, cast
 
 import torch
@@ -15,6 +16,12 @@ class ZeroBaseline(nn.Module):
         """无参数拟合，返回自身。"""
         _validate_xy(x, y)
         return self
+
+    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+        for x, y in batches():
+            _validate_xy(x, y)
+            return self
+        raise ValueError("training batches must not be empty")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """返回形状为 ``[B, 1]`` 的全零预测。"""
@@ -67,6 +74,31 @@ class ImbalanceBaseline(nn.Module):
         )
         self.slope.copy_(slope.reshape(1))
         self.intercept.copy_((mean_y - slope * mean_x).reshape(1))
+        self.fitted.fill_(True)
+        return self
+
+    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+        count = 0
+        sum_x = torch.zeros((), dtype=torch.float64)
+        sum_y = torch.zeros((), dtype=torch.float64)
+        sum_xx = torch.zeros((), dtype=torch.float64)
+        sum_xy = torch.zeros((), dtype=torch.float64)
+        for x, y in batches():
+            features, targets = _validate_xy(x, y)
+            imbalance = self._imbalance(features).to(torch.float64)
+            targets = targets.to(torch.float64)
+            count += targets.numel()
+            sum_x += imbalance.sum()
+            sum_y += targets.sum()
+            sum_xx += imbalance.square().sum()
+            sum_xy += (imbalance * targets).sum()
+        if count == 0:
+            raise ValueError("training batches must not be empty")
+        denominator = sum_xx - sum_x.square() / count
+        slope = (sum_xy - sum_x * sum_y / count) / denominator if denominator > 0 else denominator.new_zeros(())
+        intercept = sum_y / count - slope * sum_x / count
+        self.slope.copy_(slope.to(self.slope).reshape(1))
+        self.intercept.copy_(intercept.to(self.intercept).reshape(1))
         self.fitted.fill_(True)
         return self
 
@@ -139,6 +171,39 @@ class RidgeBaseline(nn.Module):
         self.fitted.fill_(True)
         return self
 
+    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+        dimension = self.num_features * self.history_snapshots
+        count = 0
+        sum_x = torch.zeros(dimension, dtype=torch.float64)
+        sum_y = torch.zeros((), dtype=torch.float64)
+        xtx = torch.zeros((dimension, dimension), dtype=torch.float64)
+        xty = torch.zeros((dimension, 1), dtype=torch.float64)
+        for x, y in batches():
+            features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
+            design = features.reshape(features.shape[0], -1).to(torch.float64)
+            response = targets.to(torch.float64)
+            count += response.numel()
+            sum_x += design.sum(dim=0)
+            sum_y += response.sum()
+            xtx += design.T @ design
+            xty += design.T @ response.unsqueeze(1)
+        if count == 0:
+            raise ValueError("training batches must not be empty")
+        mean_x = sum_x / count
+        mean_y = sum_y / count
+        gram = xtx - sum_x.unsqueeze(1) @ sum_x.unsqueeze(0) / count
+        gram += self.alpha * torch.eye(dimension, dtype=torch.float64)
+        rhs = xty - sum_x.unsqueeze(1) * mean_y
+        try:
+            weight = torch.linalg.solve(gram, rhs)
+        except torch.linalg.LinAlgError:
+            weight = torch.linalg.lstsq(gram, rhs).solution
+        intercept = mean_y - mean_x @ weight[:, 0]
+        self.weight.copy_(weight.to(self.weight))
+        self.intercept.copy_(intercept.to(self.intercept).reshape(1))
+        self.fitted.fill_(True)
+        return self
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """返回 ``[B, 1]`` Ridge 预测。"""
         features = _validate_x(x, self.num_features, self.history_snapshots)
@@ -192,6 +257,25 @@ class MLPBaseline(nn.Module):
             loss = loss_fn(self.network(features), targets.unsqueeze(1))
             loss.backward()
             optimizer.step()
+        self.fitted.fill_(True)
+        self.eval()
+        return self
+
+    def fit_batches(self, batches: Callable[[], Iterable[tuple[torch.Tensor, torch.Tensor]]]) -> Self:
+        self.train()
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        loss_fn = nn.HuberLoss()
+        seen = False
+        for _ in range(self.epochs):
+            for x, y in batches():
+                features, targets = _validate_xy(x, y, self.num_features, self.history_snapshots)
+                seen = True
+                optimizer.zero_grad(set_to_none=True)
+                loss = loss_fn(self.network(features), targets.unsqueeze(1))
+                loss.backward()
+                optimizer.step()
+        if not seen:
+            raise ValueError("training batches must not be empty")
         self.fitted.fill_(True)
         self.eval()
         return self

@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from hft_lob.datasets.lob_dataset import SampleMeta
+from hft_lob.datasets.contracts import SampleMeta
 
 _ARTIFACT_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "model_name": pl.String,

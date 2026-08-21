@@ -10,7 +10,7 @@ from hft_lob.baselines.models import (
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
-from hft_lob.datasets.lob_dataset import LOBBatch, SampleMeta
+from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 
 
 def test_zero_baseline_preserves_batch_contract() -> None:
@@ -43,6 +43,24 @@ def test_ridge_fits_and_serializes_parameters() -> None:
 
     torch.testing.assert_close(model(x), y, atol=1e-5, rtol=1e-5)
     assert {"weight", "intercept", "fitted"}.issubset(model.state_dict())
+
+
+def test_streaming_statistics_match_single_batch_fit() -> None:
+    torch.manual_seed(8)
+    x = torch.randn(12, 2, 3)
+    y = x.reshape(12, 6).sum(dim=1, keepdim=True)
+    def batches():  # type: ignore[no-untyped-def]
+        return iter(((x[:5], y[:5]), (x[5:], y[5:])))
+
+    expected_ridge = RidgeBaseline(num_features=3, history_snapshots=2, alpha=0.5).fit(x, y)
+    streamed_ridge = RidgeBaseline(num_features=3, history_snapshots=2, alpha=0.5)
+    streamed_ridge.fit_batches(batches)
+    torch.testing.assert_close(streamed_ridge(x), expected_ridge(x), atol=1e-5, rtol=1e-5)
+
+    expected_imbalance = ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,)).fit(x, y)
+    streamed_imbalance = ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,))
+    streamed_imbalance.fit_batches(batches)
+    torch.testing.assert_close(streamed_imbalance(x), expected_imbalance(x), atol=1e-5, rtol=1e-5)
 
 
 def test_mlp_fit_switches_to_deterministic_evaluation() -> None:
@@ -91,7 +109,7 @@ def test_runner_builds_prediction_artifact() -> None:
     batches = (LOBBatch(features, targets, metadata),)
     runner = BaselineRunner("zero", ZeroBaseline(), "v1", "dataset-v1", 1)
 
-    runner.fit(batches)
+    runner.fit(lambda: iter(batches))
     artifact = runner.predict(batches, split="test")
 
     assert artifact.model_name == "zero"

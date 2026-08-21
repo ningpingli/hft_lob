@@ -26,7 +26,7 @@ class CandidateFoldRun:
     """
 
     artifact: PredictionArtifact
-    standardizer_state_path: str
+    dataset_metadata_path: str
     predictions_path: str
     checkpoint_path: str | None = None
 
@@ -53,7 +53,7 @@ class FoldResult:
     fold_index: int
     candidate_name: str
     dataset_version: str
-    standardizer_state_path: str
+    dataset_metadata_path: str
     checkpoint_path: str | None
     predictions_path: str
     evaluation: EvaluationReport
@@ -155,7 +155,7 @@ def run_walk_forward(
                     fold_index=fold_index,
                     candidate_name=candidate_name,
                     dataset_version=metadata.dataset_id,
-                    standardizer_state_path=run.standardizer_state_path,
+                    dataset_metadata_path=run.dataset_metadata_path,
                     checkpoint_path=run.checkpoint_path,
                     predictions_path=predictions_path,
                     evaluation=evaluation,
@@ -216,8 +216,8 @@ def _validate_candidate_run(
     }
     if mismatches:
         raise ValueError(f"executor returned an artifact with mismatched identity: {mismatches}")
-    if not run.standardizer_state_path.strip():
-        raise ValueError("standardizer_state_path must not be empty")
+    if not run.dataset_metadata_path.strip():
+        raise ValueError("dataset_metadata_path must not be empty")
     if not run.predictions_path.strip():
         raise ValueError("predictions_path must not be empty")
 

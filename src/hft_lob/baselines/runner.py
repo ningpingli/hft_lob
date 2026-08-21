@@ -1,46 +1,56 @@
-"""非梯度 baseline 的统一运行适配器。"""
+"""非梯度 baseline 的流式训练与预测适配器。"""
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 
 from hft_lob.baselines.base import BaselineModel
-from hft_lob.datasets.lob_dataset import LOBBatch, SampleMeta
+from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
 
 
 @dataclass
 class BaselineRunner:
-    """让 Zero/Imbalance/Ridge 与神经模型共享 PredictionArtifact 出口。"""
-
     name: str
     model: BaselineModel
     model_version: str
     dataset_version: str
     fold_index: int
 
-    def fit(self, batches: tuple[LOBBatch, ...]) -> None:
-        """仅使用当前 fold 的 training batches 拟合。"""
-        features, targets, _ = _merge_batches(batches)
-        self.model.fit(features, targets)
+    def fit(self, batches: Callable[[], Iterable[LOBBatch]]) -> None:
+        """流式拟合；模型可为多个 epoch 重建 DataLoader 迭代器。"""
+        self.model.fit_batches(
+            lambda: ((batch.features, batch.targets) for batch in batches())
+        )
 
-    def predict(self, batches: tuple[LOBBatch, ...], *, split: str) -> PredictionArtifact:
-        """生成与神经模型相同的预测产物。"""
+    def predict(self, batches: Iterable[LOBBatch], *, split: str) -> PredictionArtifact:
+        """逐 batch 推理，仅累积最终预测、目标和必要 metadata。"""
         if not split.strip():
             raise ValueError("split must not be empty")
-        features, targets, metadata = _merge_batches(batches)
+        predictions: list[np.ndarray] = []
+        targets: list[np.ndarray] = []
+        metadata: list[SampleMeta] = []
         with torch.no_grad():
-            predictions = self.model.forward(features)
-        if predictions.shape != (features.shape[0], 1):
-            raise ValueError(
-                f"baseline prediction must have shape [B,1], got {tuple(predictions.shape)}"
-            )
+            for batch in batches:
+                _validate_batch(batch)
+                output = self.model.forward(batch.features)
+                if output.shape != (batch.features.shape[0], 1):
+                    raise ValueError(
+                        f"baseline prediction must have shape [B,1], got {tuple(output.shape)}"
+                    )
+                predictions.append(output[:, 0].detach().cpu().numpy())
+                targets.append(batch.targets[:, 0].detach().cpu().numpy())
+                metadata.extend(batch.metadata)
+        if not predictions:
+            raise ValueError("prediction batches must not be empty")
         return PredictionArtifact(
-            predictions=predictions[:, 0].detach().cpu().numpy(),
-            targets=targets[:, 0].detach().cpu().numpy(),
-            metadata=metadata,
+            predictions=np.concatenate(predictions),
+            targets=np.concatenate(targets),
+            metadata=tuple(metadata),
             model_name=self.name,
             model_version=self.model_version,
             dataset_version=self.dataset_version,
@@ -49,18 +59,10 @@ class BaselineRunner:
         )
 
 
-def _merge_batches(
-    batches: tuple[LOBBatch, ...],
-) -> tuple[torch.Tensor, torch.Tensor, tuple[SampleMeta, ...]]:
-    if not batches:
-        raise ValueError("batches must not be empty")
-    features = torch.cat([batch.features for batch in batches], dim=0).detach().cpu()
-    targets = torch.cat([batch.targets for batch in batches], dim=0).detach().cpu()
-    metadata = tuple(meta for batch in batches for meta in batch.metadata)
-    if features.ndim != 3 or targets.ndim != 2 or targets.shape[1] != 1:
+def _validate_batch(batch: LOBBatch) -> None:
+    if batch.features.ndim != 3 or batch.targets.ndim != 2 or batch.targets.shape[1] != 1:
         raise ValueError("batches must follow [B,T,F] features and [B,1] targets")
-    if features.shape[0] != targets.shape[0] or features.shape[0] != len(metadata):
+    if batch.features.shape[0] != batch.targets.shape[0] or batch.features.shape[0] != len(batch.metadata):
         raise ValueError("batch features, targets and metadata counts must match")
-    if not torch.isfinite(features).all() or not torch.isfinite(targets).all():
+    if not torch.isfinite(batch.features).all() or not torch.isfinite(batch.targets).all():
         raise ValueError("batch features and targets must be finite")
-    return features, targets, metadata

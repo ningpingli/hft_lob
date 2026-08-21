@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from hft_lob.datasets.lob_dataset import SampleMeta
+from hft_lob.datasets.contracts import SampleMeta
 from hft_lob.systems.artifact import (
     PredictionArtifact,
     save_prediction_artifact,

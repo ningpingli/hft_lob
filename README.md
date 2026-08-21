@@ -54,40 +54,34 @@ train_window_days + validation_window_days + test_window_days
 构建数据集：
 
 ```bash
-uv run hft_lob \
+uv run python -m hft_lob.data_pipeline build \
   --config configs/experiment.yaml \
-  --experiment-id prepare-000001 \
-  --stages prepare-data
+  --output-root data/prebuilt
 ```
 
 PowerShell：
 
 ```powershell
-uv run hft_lob `
+uv run python -m hft_lob.data_pipeline build `
   --config configs/experiment.yaml `
-  --experiment-id prepare-000001 `
-  --stages prepare-data
+  --output-root data/prebuilt
 ```
 
 成功后会打印：
 
 ```text
-dataset_version=...
-manifest_path=...
-quality_report_path=...
-fold_count=...
+<absolute-path>/data/prebuilt/<dataset_id>
 ```
 
 主要数据产物：
 
 ```text
-data/processed/<ticker>/<dataset_version>/
-data/datasets/<ticker>/<dataset_version>/manifest.parquet
-data/datasets/<ticker>/<dataset_version>/quality_reports.parquet
+data/prebuilt/<dataset_id>/features.npy
+data/prebuilt/<dataset_id>/targets.npy
+data/prebuilt/<dataset_id>/folds/fold_001/{train,validation,test}.parquet
 ```
 
-`manifest.parquet` 是 split 的事实来源，不要移动 processed 文件来表达
-train/validation/test。
+数据包发布后只读；训练只通过 fold 索引消费全局 memory-mapped tensor。
 
 ## 训练配置
 
@@ -149,6 +143,7 @@ walk_forward:
 ```bash
 uv run hft_lob \
   --config configs/experiment.yaml \
+  --dataset-dir data/prebuilt/<dataset_id> \
   --experiment-id cnn1-production \
   --gpu-id 0 \
   --stages walk-forward
@@ -159,6 +154,7 @@ PowerShell：
 ```powershell
 uv run hft_lob `
   --config configs/experiment.yaml `
+  --dataset-dir data/prebuilt/<dataset_id> `
   --experiment-id cnn1-production `
   --gpu-id 0 `
   --stages walk-forward
@@ -166,20 +162,7 @@ uv run hft_lob `
 
 不传 `--gpu-id` 时，Lightning 使用 `accelerator="auto"` 自动选择设备。
 
-## 从原始数据开始训练
-
-同一任务中顺序执行数据构建和训练：
-
-```bash
-uv run hft_lob \
-  --config configs/experiment.yaml \
-  --experiment-id cnn1-full-run \
-  --gpu-id 0 \
-  --stages prepare-data walk-forward
-```
-
-只指定 `walk-forward` 时，CLI 也会使用相同配置解析内容寻址的数据版本，确保训练
-使用的 manifest、特征 schema 和标签版本一致。
+数据构建和训练是两个独立命令。训练不会调用预处理，也不会在数据包缺失时 fallback。
 
 ## 多 GPU 训练不同模型
 
@@ -193,11 +176,11 @@ configs/deeplob.yaml    model.name: deeplob
 Linux Bash：
 
 ```bash
-uv run hft_lob --config configs/cnn1.yaml \
+uv run hft_lob --config configs/cnn1.yaml --dataset-dir data/prebuilt/<dataset_id> \
   --experiment-id cnn1-gpu0 --gpu-id 0 --stages walk-forward \
   > cnn1-gpu0.log 2>&1 &
 
-uv run hft_lob --config configs/deeplob.yaml \
+uv run hft_lob --config configs/deeplob.yaml --dataset-dir data/prebuilt/<dataset_id> \
   --experiment-id deeplob-gpu1 --gpu-id 1 --stages walk-forward \
   > deeplob-gpu1.log 2>&1 &
 
@@ -277,7 +260,7 @@ uv run mypy src/hft_lob
 src/hft_lob/
 ├── configs/                  # 强类型实验配置
 ├── preprocessing/            # 清洗、特征、标签、manifest、split、normalizer
-├── datasets/                 # LOBWindowDataset / LOBBatch
+├── datasets/                 # 数据包 builder / mmap Dataset / batch 契约
 ├── models/                   # 纯 torch.nn.Module 模型
 ├── baselines/                # Zero / Imbalance / Ridge / MLP
 ├── systems/                  # DataModule、Lightning、executor、artifact、评估

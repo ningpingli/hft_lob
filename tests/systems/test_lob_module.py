@@ -24,7 +24,7 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.datasets.lob_dataset import LOBBatch, SampleMeta
+from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.lob_module import LOBLightningModule
 
 
