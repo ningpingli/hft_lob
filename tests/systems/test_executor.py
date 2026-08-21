@@ -59,8 +59,6 @@ def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
         task=TaskConfig(ticker="TEST"),
         data=DataConfig(
             raw_dir=str(tmp_path / "raw"),
-            processed_dir=str(tmp_path / "processed"),
-            manifest_dir=str(tmp_path / "manifests"),
         ),
         cleaning=CleaningConfig(),
         target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),

@@ -56,8 +56,6 @@ def _config(tmp_path: Path) -> DataBuildConfig:
         task=TaskConfig(ticker="TEST"),
         data=DataConfig(
             raw_dir=str(tmp_path / "raw"),
-            processed_dir=str(tmp_path / "processed"),
-            manifest_dir=str(tmp_path / "datasets"),
         ),
         cleaning=CleaningConfig(max_ffill_gap_seconds=6),
         target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),

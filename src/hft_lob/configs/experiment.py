@@ -38,13 +38,11 @@ class TaskConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    """数据规格与目录（§30 目录分层：raw immutable，split 用 manifest 表达）。"""
+    """原始数据规格；阶段一只读取 immutable raw。"""
 
     levels: int = 5
     snapshot_interval_seconds: int = 3
     raw_dir: str = "data/raw"  # 原始 parquet 根目录（只读，immutable）
-    processed_dir: str = "data/processed"  # 清洗 + 特征 + 标签落盘根目录
-    manifest_dir: str = "data/datasets"  # split manifest 根目录
     column_mapping: dict[str, str] = field(default_factory=dict)
 
 

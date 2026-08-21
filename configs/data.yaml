@@ -6,8 +6,6 @@ data:
   levels: 5
   snapshot_interval_seconds: 3
   raw_dir: data/raw
-  processed_dir: data/processed
-  manifest_dir: data/datasets
   column_mapping:
     AskPrice1: ASKp1
     AskVolume1: ASKs1

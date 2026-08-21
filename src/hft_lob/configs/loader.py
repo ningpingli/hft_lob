@@ -147,13 +147,8 @@ def _validate_data_config(config: DataBuildConfig) -> None:
         raise ValueError("target.type must be 'log_mid_return' or 'simple_mid_return'")
     if config.target.tolerance_seconds < 0:
         raise ValueError("target.tolerance_seconds must be >= 0")
-    for field, value in (
-        ("data.raw_dir", config.data.raw_dir),
-        ("data.processed_dir", config.data.processed_dir),
-        ("data.manifest_dir", config.data.manifest_dir),
-    ):
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"{field} must be a non-empty path")
+    if not isinstance(config.data.raw_dir, str) or not config.data.raw_dir.strip():
+        raise ValueError("data.raw_dir must be a non-empty path")
 
 
 def _validate_model_config(config: ModelRunConfig) -> None:

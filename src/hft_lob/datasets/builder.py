@@ -218,7 +218,8 @@ def _finish_package(
     plan: WalkForwardPlan,
     quality: object,
 ) -> None:
-    lazy_anchors = pl.scan_parquet(root / "anchors.parquet")
+    anchor_path = root / "anchors.parquet"
+    lazy_anchors = pl.scan_parquet(anchor_path)
     for fold in plan.folds:
         for split, dates in (
             ("train", fold.train_dates),
@@ -230,6 +231,7 @@ def _finish_package(
             lazy_anchors.filter(pl.col("trade_date").is_in(dates)).select(
                 FOLD_INDEX_COLUMNS
             ).sink_parquet(path)
+    anchor_path.unlink()
     if not isinstance(quality, list):
         raise TypeError("quality records must be a list")
     pl.DataFrame(quality).sort("trade_date").write_parquet(root / "quality.parquet")
