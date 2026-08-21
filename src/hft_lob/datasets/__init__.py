@@ -1,5 +1,14 @@
-"""datasets 包：滑窗 torch 数据集。"""
+"""LOB 运行时 Dataset 与不可变预构建数据包契约。"""
 
 from hft_lob.datasets.lob_dataset import LOBBatch, LOBWindowDataset, SampleMeta
+from hft_lob.datasets.package import DatasetPackageMetadata, compute_dataset_id
+from hft_lob.datasets.validation import validate_dataset_package
 
-__all__ = ["LOBBatch", "LOBWindowDataset", "SampleMeta"]
+__all__ = [
+    "DatasetPackageMetadata",
+    "LOBBatch",
+    "LOBWindowDataset",
+    "SampleMeta",
+    "compute_dataset_id",
+    "validate_dataset_package",
+]

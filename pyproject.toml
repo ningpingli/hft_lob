@@ -68,6 +68,7 @@ files = ["src/hft_lob"]
 
 [dependency-groups]
 dev = [
+    "code2llm>=0.5.176",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "ruff>=0.16.3",
