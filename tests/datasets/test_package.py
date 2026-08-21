@@ -72,7 +72,20 @@ def _write_package(tmp_path: Path) -> Path:
     (root / "dataset.json").write_text(
         json.dumps(metadata.to_dict(), ensure_ascii=False), encoding="utf-8"
     )
-    pl.DataFrame({"status": ["passed"]}).write_parquet(root / "quality.parquet")
+    pl.DataFrame(
+        {
+            "trade_date": ["2020-07-16"],
+            "row_count": [4],
+            "missing_ratio": [0.0],
+            "duplicate_count": [0],
+            "crossed_book_count": [0],
+            "one_side_missing_count": [0],
+            "max_gap": [3.0],
+            "p95_gap": [3.0],
+            "stale_snapshot_ratio": [0.0],
+            "invalid_level_order_count": [0],
+        }
+    ).write_parquet(root / "quality.parquet")
     (root / "_SUCCESS").touch()
     return root
 
@@ -112,3 +125,11 @@ def test_metadata_rejects_identity_mismatch() -> None:
 
     with pytest.raises(ValueError, match="does not match"):
         DatasetPackageMetadata.from_dict(value)
+
+
+def test_validation_rejects_invalid_quality_contract(tmp_path: Path) -> None:
+    root = _write_package(tmp_path)
+    pl.DataFrame({"status": ["passed"]}).write_parquet(root / "quality.parquet")
+
+    with pytest.raises(ValueError, match="quality.parquet has an invalid schema"):
+        validate_dataset_package(root)

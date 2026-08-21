@@ -9,6 +9,8 @@ import numpy as np
 import polars as pl
 
 from hft_lob.datasets.package import (
+    QUALITY_COLUMNS,
+    QUALITY_SCHEMA,
     SUCCESS_MARKER,
     DatasetPackage,
     DatasetPackageMetadata,
@@ -58,6 +60,7 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
 
     rows = pl.read_parquet(root / "rows.parquet")
     _validate_rows(rows, row_count)
+    _validate_quality(pl.read_parquet(root / "quality.parquet"), rows, row_count)
     fold_dirs = sorted(path for path in (root / "folds").glob("fold_*") if path.is_dir())
     if not fold_dirs:
         raise ValueError("dataset package contains no fold indexes")
@@ -97,6 +100,40 @@ def _validate_rows(rows: pl.DataFrame, row_count: int) -> None:
         raise ValueError("rows.parquet has an invalid schema")
     if rows.height != row_count or rows.get_column("global_index").to_list() != list(range(row_count)):
         raise ValueError("rows.parquet must cover every global row exactly once")
+
+
+def _validate_quality(quality: pl.DataFrame, rows: pl.DataFrame, row_count: int) -> None:
+    if tuple(quality.columns) != QUALITY_COLUMNS or any(
+        quality.schema[name] != dtype for name, dtype in QUALITY_SCHEMA.items()
+    ):
+        raise ValueError("quality.parquet has an invalid schema")
+    if quality.is_empty() or quality.null_count().select(pl.sum_horizontal(pl.all())).item() != 0:
+        raise ValueError("quality.parquet must be non-empty and contain no nulls")
+    if quality.get_column("trade_date").is_duplicated().any():
+        raise ValueError("quality.parquet must contain one row per trade date")
+    if set(quality.get_column("trade_date")) != set(rows.get_column("trade_date")):
+        raise ValueError("quality.parquet trade dates do not match rows.parquet")
+    if quality.get_column("row_count").sum() != row_count:
+        raise ValueError("quality.parquet row counts do not match arrays")
+    invalid = quality.filter(
+        (pl.col("row_count") <= 0)
+        | ~pl.col("missing_ratio").is_between(0.0, 1.0, closed="both")
+        | ~pl.col("stale_snapshot_ratio").is_between(0.0, 1.0, closed="both")
+        | (pl.col("max_gap") < 0)
+        | (pl.col("p95_gap") < 0)
+        | (pl.col("p95_gap") > pl.col("max_gap"))
+        | pl.any_horizontal(
+            pl.col(name) < 0
+            for name in (
+                "duplicate_count",
+                "crossed_book_count",
+                "one_side_missing_count",
+                "invalid_level_order_count",
+            )
+        )
+    )
+    if not invalid.is_empty():
+        raise ValueError("quality.parquet contains invalid metric values")
 
 
 def _validate_fold_references(

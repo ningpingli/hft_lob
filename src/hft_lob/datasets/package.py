@@ -32,6 +32,32 @@ FOLD_INDEX_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "anchor_timestamp": pl.Datetime("us"),
 }
 
+QUALITY_COLUMNS = (
+    "trade_date",
+    "row_count",
+    "missing_ratio",
+    "duplicate_count",
+    "crossed_book_count",
+    "one_side_missing_count",
+    "max_gap",
+    "p95_gap",
+    "stale_snapshot_ratio",
+    "invalid_level_order_count",
+)
+
+QUALITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "trade_date": pl.String,
+    "row_count": pl.Int64,
+    "missing_ratio": pl.Float64,
+    "duplicate_count": pl.Int64,
+    "crossed_book_count": pl.Int64,
+    "one_side_missing_count": pl.Int64,
+    "max_gap": pl.Float64,
+    "p95_gap": pl.Float64,
+    "stale_snapshot_ratio": pl.Float64,
+    "invalid_level_order_count": pl.Int64,
+}
+
 
 def compute_dataset_id(
     *,
