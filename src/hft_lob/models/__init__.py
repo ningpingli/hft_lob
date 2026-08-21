@@ -7,7 +7,7 @@
 ``itransformer`` / ``lobtransformer`` / ``axiallob`` / ``dla`` / ``binbtabl`` /
 ``binctabl`` / ``hlob`` 全部实装（MLP 属 baseline，见 ``hft_lob.baselines``）。
 所有模型均为纯 ``torch.nn.Module``，训练职责由 ``systems.LOBLightningModule``
-统一封装；``build_model`` 是唯一模型工厂，按 ``ExperimentConfig`` + 特征 schema
+统一封装；``build_model`` 是唯一模型工厂，按训练配置 + 数据集元数据
 实例化模型（``hlob`` 额外需要调用方提供同调结构）。
 """
 
@@ -18,7 +18,7 @@ from typing import Any
 
 from torch import nn
 
-from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.models.AxialLob.axiallob import AxialLOB
 from hft_lob.models.CNN1.cnn1 import CNN1
 from hft_lob.models.CNN2.cnn2 import CNN2
@@ -32,9 +32,10 @@ from hft_lob.models.Transformer.transformer import Transformer
 
 
 def build_model(
-    config: ExperimentConfig,
+    config: ModelRunConfig,
     *,
     feature_columns: Sequence[str],
+    history_snapshots: int,
     homological_structures: dict[str, Any] | None = None,
 ) -> nn.Module:
     """按配置实例化模型（§18：统一 forward([B,T,F]) -> [B,1]）。
@@ -54,8 +55,10 @@ def build_model(
     """
     name = config.model.name
     num_features = len(feature_columns)
-    history = config.window.history_snapshots
-    levels = config.data.levels
+    history = history_snapshots
+    levels = sum(name.startswith("ASKp") for name in feature_columns) or num_features // 4
+    if history <= 0 or levels <= 0:
+        raise ValueError("dataset metadata must contain positive history and LOB levels")
 
     if name == "cnn1":
         return CNN1(num_features=num_features, history_length=history)

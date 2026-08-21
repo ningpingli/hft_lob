@@ -88,6 +88,7 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
     model = build_model(
         _make_config(name),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     # CNN1 / DeepLOB 已迁移到统一 [B,T,F]；其余模型将在后续分支迁移。
     model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
@@ -109,6 +110,7 @@ def test_all_registered_models_have_scalar_regression_output(
     model = build_model(
         _make_config(name),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     model_input = sample if name in {"cnn1", "deeplob"} else sample.unsqueeze(1)
     prediction = model(model_input)
@@ -129,6 +131,7 @@ def test_hlob_constructs_and_forwards_with_minimal_structures(
     model = build_model(
         _make_config("hlob"),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
         homological_structures=structures,
     )
     out = model(sample.unsqueeze(1))
@@ -145,6 +148,7 @@ def test_hlob_constructs_with_nested_structures() -> None:
     model = build_model(
         _make_config("hlob"),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
         homological_structures=structures,
     )
     assert model.max_feature_index == 7
@@ -155,6 +159,7 @@ def test_hlob_requires_homological_structures() -> None:
         build_model(
             _make_config("hlob"),
             feature_columns=[f"f{i}" for i in range(_FEATURES)],
+            history_snapshots=_HISTORY,
         )
 
 
@@ -162,6 +167,7 @@ def test_contract_injections() -> None:
     axial = build_model(
         _make_config("axiallob"),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     assert axial.W == _FEATURES
     assert axial.H == _HISTORY
@@ -169,6 +175,7 @@ def test_contract_injections() -> None:
     btabl = build_model(
         _make_config("binbtabl"),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     assert btabl.BiN.t1 == _HISTORY
     assert btabl.BiN.d1 == _FEATURES
@@ -177,6 +184,7 @@ def test_contract_injections() -> None:
     dla = build_model(
         _make_config("dla"),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     assert dla.num_snapshots == _HISTORY
 
@@ -199,6 +207,7 @@ def test_input_dimension_mismatch_raises(name: str, x: torch.Tensor) -> None:
     model = build_model(
         _make_config(name),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
     )
     with pytest.raises(ValueError):
         model(x)

@@ -15,16 +15,17 @@ from hft_lob.baselines.models import (
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
-from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.configs.experiment import ModelRunConfig
 
 BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge", "mlp")
 
 
 def build_baseline(
     name: str,
-    config: ExperimentConfig,
+    config: ModelRunConfig,
     *,
     feature_columns: Sequence[str],
+    history_snapshots: int,
 ) -> BaselineModel:
     """按实验配置构建 baseline。
 
@@ -45,7 +46,9 @@ def build_baseline(
     if name not in BASELINE_NAMES:
         raise ValueError(f"unsupported baseline {name!r}; expected one of {BASELINE_NAMES}")
     num_features = len(columns)
-    history = config.window.history_snapshots
+    history = history_snapshots
+    if history <= 0:
+        raise ValueError("history_snapshots must be > 0")
     if name == "zero":
         return ZeroBaseline()
     if name == "imbalance":

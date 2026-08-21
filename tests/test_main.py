@@ -43,7 +43,7 @@ def test_main_passes_dataset_directly_to_training(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = Path(__file__).parents[1] / "configs" / "experiment.yaml"
+    config = Path(__file__).parents[1] / "configs" / "model.yaml"
     dataset_dir = tmp_path / "immutable-dataset"
     seen: dict[str, object] = {}
 
@@ -54,6 +54,11 @@ def test_main_passes_dataset_directly_to_training(
     monkeypatch.chdir(tmp_path)
     main_module = importlib.import_module("hft_lob.main")
     monkeypatch.setattr(main_module, "run_walk_forward", fake_run)
+    monkeypatch.setattr(
+        main_module,
+        "validate_dataset_package",
+        lambda path: SimpleNamespace(ticker="TEST"),
+    )
     monkeypatch.setattr(
         sys,
         "argv",

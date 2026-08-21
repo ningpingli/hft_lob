@@ -10,7 +10,7 @@ from pathlib import Path
 
 import polars as pl
 
-from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.configs.experiment import DataBuildConfig
 from hft_lob.preprocessing.clean import DataCleaner, SessionSegment
 from hft_lob.preprocessing.features import FeatureTransformer
 from hft_lob.preprocessing.labels import LabelTransformer
@@ -46,7 +46,7 @@ class PreparedDataset:
     walk_forward_plan: WalkForwardPlan
 
 
-def prepare_dataset(config: ExperimentConfig) -> PreparedDataset:
+def prepare_dataset(config: DataBuildConfig) -> PreparedDataset:
     """执行 raw→独立 session parquet→manifest，返回唯一训练交付对象。
 
     processed 文件名包含 trade_date/session_id；manifest 每行对应一个 session，
@@ -157,7 +157,7 @@ def prepare_dataset(config: ExperimentConfig) -> PreparedDataset:
 
 def _build_walk_forward_plan(
     manifest: pl.DataFrame,
-    config: ExperimentConfig,
+    config: DataBuildConfig,
     version: str,
 ) -> WalkForwardPlan:
     trade_dates = manifest.get_column("trade_date").unique().sort().to_list()
@@ -169,7 +169,7 @@ def _build_walk_forward_plan(
     return WalkForwardPlan(dataset_version=version, folds=folds)
 
 
-def _discover_raw_files(config: ExperimentConfig) -> list[Path]:
+def _discover_raw_files(config: DataBuildConfig) -> list[Path]:
     root = Path(config.data.raw_dir)
     ticker_root = root / config.ticker
     search_root = ticker_root if ticker_root.is_dir() else root
@@ -184,7 +184,7 @@ def _discover_raw_files(config: ExperimentConfig) -> list[Path]:
     return files
 
 
-def _processing_config(config: ExperimentConfig) -> dict[str, object]:
+def _processing_config(config: DataBuildConfig) -> dict[str, object]:
     """只纳入会改变 processed 内容的配置，排除目录、训练和执行范围。"""
     return {
         "pipeline_semantics_version": 1,

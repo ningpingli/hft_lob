@@ -9,7 +9,8 @@ from collections.abc import Sequence
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from hft_lob.configs import load_config
+from hft_lob.configs import load_model_config
+from hft_lob.datasets.validation import validate_dataset_package
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 from hft_lob.utils.checkpoint_utils import backup_experiment_config
@@ -30,7 +31,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         --stages / --seed）。
     """
     parser = argparse.ArgumentParser(description="LOB walk-forward experiment pipeline")
-    parser.add_argument("--config", default="configs/experiment.yaml")
+    parser.add_argument("--config", default="configs/model.yaml")
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--experiment-id")
     parser.add_argument("--resume-ckpt")
@@ -54,13 +55,13 @@ def main() -> None:
     训练流程主入口。
 
     完整流程：
-    1. 加载配置（load_config）
+    1. 加载纯训练配置（load_model_config）
     2. 解析实验 ID（resolve_experiment_id）
     3. 解析日志目录（resolve_log_dir）
     4. 备份配置（backup_experiment_config）
     5. 构建日志器（build_logger）
-    6. prepare_dataset 生成固定版本和 WalkForwardPlan
-    7. run_walk_forward 使用严格因果滚动标准化并运行模型/baseline
+    6. 校验数据包并读取其不可变元数据
+    7. run_walk_forward 运行模型/baseline
     8. 所有 candidate 输出 PredictionArtifact
     9. build_evaluation_report 输出 EvaluationReport/FoldResult
     """
@@ -74,10 +75,11 @@ def main() -> None:
     from hft_lob.utils.seed import set_seed
 
     provisional_id = args.experiment_id or "pending"
-    config = load_config(args.config, experiment_id=provisional_id)
+    config = load_model_config(args.config, experiment_id=provisional_id)
+    dataset_metadata = validate_dataset_package(args.dataset_dir)
     experiment_id = resolve_experiment_id(
         model_name=config.model.name,
-        ticker=config.ticker,
+        ticker=dataset_metadata.ticker,
         override_id=args.experiment_id,
         resume_ckpt=args.resume_ckpt,
     )

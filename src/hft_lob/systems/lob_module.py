@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.datasets.contracts import LOBBatch, SampleMeta
 from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.losses import build_loss
@@ -31,7 +31,7 @@ class LOBLightningModule(L.LightningModule):
     def __init__(
         self,
         model: nn.Module,
-        config: ExperimentConfig,
+        config: ModelRunConfig,
         *,
         dataset_version: str | None = None,
         model_version: str = "unknown",

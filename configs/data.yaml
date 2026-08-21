@@ -1,0 +1,66 @@
+task:
+  ticker: "000001"
+  task_type: regression
+
+data:
+  levels: 5
+  snapshot_interval_seconds: 3
+  raw_dir: data/raw
+  processed_dir: data/processed
+  manifest_dir: data/datasets
+  column_mapping:
+    AskPrice1: ASKp1
+    AskVolume1: ASKs1
+    BidPrice1: BIDp1
+    BidVolume1: BIDs1
+    AskPrice2: ASKp2
+    AskVolume2: ASKs2
+    BidPrice2: BIDp2
+    BidVolume2: BIDs2
+    AskPrice3: ASKp3
+    AskVolume3: ASKs3
+    BidPrice3: BIDp3
+    BidVolume3: BIDs3
+    AskPrice4: ASKp4
+    AskVolume4: ASKs4
+    BidPrice4: BIDp4
+    BidVolume4: BIDs4
+    AskPrice5: ASKp5
+    AskVolume5: ASKs5
+    BidPrice5: BIDp5
+    BidVolume5: BIDs5
+    timestamp: timestamp
+    trade_date: trade_date
+    ticker: ticker
+    last: last
+    amount: amount
+    volumn: volume
+
+cleaning:
+  max_ffill_gap_seconds: 6
+target:
+  type: log_mid_return
+  horizon_seconds: 60
+  tolerance_seconds: 3
+sessions:
+  morning: ["09:30:00", "11:30:00"]
+  afternoon: ["13:00:00", "14:57:00"]
+  allow_cross_session: false
+window:
+  history_snapshots: 180
+  include_anchor_snapshot: true
+features:
+  use_derived: false
+normalization:
+  mode: causal_rolling
+  normalize_window: 180
+split:
+  strategy: chronological
+  train_ratio: 0.6
+  validation_ratio: 0.2
+walk_forward:
+  enabled: true
+  train_window_days: 60
+  validation_window_days: 20
+  test_window_days: 20
+  step_days: 20

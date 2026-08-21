@@ -9,7 +9,7 @@ from typing import cast
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
-from hft_lob.configs.experiment import ExperimentConfig
+from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.datasets.contracts import LOBBatch
 from hft_lob.datasets.package import DatasetPackageMetadata
 from hft_lob.models import build_model
@@ -39,7 +39,7 @@ class DefaultWalkForwardExecutor:
         *,
         dataset_dir: str,
         metadata: DatasetPackageMetadata,
-        config: ExperimentConfig,
+        config: ModelRunConfig,
         fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
@@ -98,7 +98,11 @@ class DefaultWalkForwardExecutor:
             devices=self.devices,
         )
         lightning_module = LOBLightningModule(
-            build_model(config, feature_columns=metadata.feature_columns),
+            build_model(
+                config,
+                feature_columns=metadata.feature_columns,
+                history_snapshots=metadata.history_snapshots,
+            ),
             config,
             dataset_version=metadata.dataset_id,
             model_version=model_version,
@@ -129,7 +133,7 @@ class DefaultWalkForwardExecutor:
         *,
         candidate_name: str,
         metadata: DatasetPackageMetadata,
-        config: ExperimentConfig,
+        config: ModelRunConfig,
         datamodule: LOBDataModule,
         model_version: str,
         fold_index: int,
@@ -141,6 +145,7 @@ class DefaultWalkForwardExecutor:
                 candidate_name,
                 config,
                 feature_columns=metadata.feature_columns,
+                history_snapshots=metadata.history_snapshots,
             ),
             model_version=model_version,
             dataset_version=metadata.dataset_id,

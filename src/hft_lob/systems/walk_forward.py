@@ -9,7 +9,7 @@ from typing import Protocol
 
 import numpy as np
 
-from hft_lob.configs.experiment import ExperimentConfig, WalkForwardConfig
+from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig, WalkForwardConfig
 from hft_lob.datasets.package import DatasetPackageMetadata
 from hft_lob.datasets.validation import validate_dataset_package
 from hft_lob.preprocessing.split import Fold, WalkForwardPlan
@@ -39,11 +39,12 @@ class WalkForwardExecutor(Protocol):
         *,
         dataset_dir: str,
         metadata: DatasetPackageMetadata,
-        config: ExperimentConfig,
+        config: ModelRunConfig,
         fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
         """在一个 fold 上拟合并返回 test split 的预测。"""
+        ...
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,7 @@ def select_walk_forward_folds(
 
 def run_walk_forward(
     dataset_dir: str | Path,
-    config: ExperimentConfig,
+    config: ModelRunConfig,
     *,
     executor: WalkForwardExecutor,
 ) -> WalkForwardReport:
@@ -118,11 +119,7 @@ def run_walk_forward(
     """
     root = Path(dataset_dir).resolve()
     metadata = validate_dataset_package(root)
-    if metadata.ticker != config.ticker:
-        raise ValueError("model config ticker does not match dataset package")
-    if metadata.history_snapshots != config.window.history_snapshots:
-        raise ValueError("model window does not match dataset package")
-    fold_indices = _select_package_folds(root, config.walk_forward)
+    fold_indices = _select_package_folds(root, config.folds)
     candidates = _candidate_names(config)
 
     results: list[FoldResult] = []
@@ -169,9 +166,7 @@ def run_walk_forward(
     )
 
 
-def _select_package_folds(root: Path, config: WalkForwardConfig) -> tuple[int, ...]:
-    if not config.enabled:
-        raise ValueError("walk-forward execution is disabled")
+def _select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int, ...]:
     available = tuple(
         sorted(int(path.name.removeprefix("fold_")) for path in (root / "folds").glob("fold_*"))
     )
@@ -184,7 +179,7 @@ def _select_package_folds(root: Path, config: WalkForwardConfig) -> tuple[int, .
     return selected
 
 
-def _candidate_names(config: ExperimentConfig) -> tuple[str, ...]:
+def _candidate_names(config: ModelRunConfig) -> tuple[str, ...]:
     names = (config.model.name, *config.baselines.names)
     invalid = [name for name in names if not name.strip()]
     if invalid:

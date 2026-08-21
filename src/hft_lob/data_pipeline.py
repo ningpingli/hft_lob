@@ -6,7 +6,7 @@ import argparse
 import json
 from collections.abc import Sequence
 
-from hft_lob.configs import load_config
+from hft_lob.configs import load_data_config
 from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.datasets.validation import validate_dataset_package
 
@@ -26,7 +26,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
     if args.command == "build":
-        config = load_config(args.config, experiment_id="data-build")
+        config = load_data_config(args.config)
         package = build_dataset_package(config, args.output_root)
         print(package)
         return

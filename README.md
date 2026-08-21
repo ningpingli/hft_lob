@@ -40,7 +40,7 @@ ASKp5, ASKs5, BIDp5, BIDs5
 last, volume, amount
 ```
 
-原始字段名称不同时，在 `configs/experiment.yaml` 的 `data.column_mapping` 中配置
+原始字段名称不同时，在 `configs/data.yaml` 的 `data.column_mapping` 中配置
 “原始字段 → canonical 字段”，不需要修改清洗代码。
 
 默认 walk-forward 第一折至少需要 `60 + 20 + 20 = 100` 个有效交易日。执行
@@ -55,7 +55,7 @@ train_window_days + validation_window_days + test_window_days
 
 ```bash
 uv run python -m hft_lob.data_pipeline build \
-  --config configs/experiment.yaml \
+  --config configs/data.yaml \
   --output-root data/prebuilt
 ```
 
@@ -63,7 +63,7 @@ PowerShell：
 
 ```powershell
 uv run python -m hft_lob.data_pipeline build `
-  --config configs/experiment.yaml `
+  --config configs/data.yaml `
   --output-root data/prebuilt
 ```
 
@@ -107,12 +107,7 @@ baselines:
 ### Fold 范围
 
 ```yaml
-walk_forward:
-  enabled: true
-  train_window_days: 60
-  validation_window_days: 20
-  test_window_days: 20
-  step_days: 20
+folds:
   start_fold: 1
   num_folds: 3              # null 表示从 start_fold 执行到最后
 ```
@@ -129,7 +124,7 @@ training:
 baselines:
   names: []
 
-walk_forward:
+folds:
   start_fold: 1
   num_folds: 1
 ```
@@ -142,7 +137,7 @@ walk_forward:
 
 ```bash
 uv run hft_lob \
-  --config configs/experiment.yaml \
+  --config configs/model.yaml \
   --dataset-dir data/prebuilt/<dataset_id> \
   --experiment-id cnn1-production \
   --gpu-id 0 \
@@ -153,7 +148,7 @@ PowerShell：
 
 ```powershell
 uv run hft_lob `
-  --config configs/experiment.yaml `
+  --config configs/model.yaml `
   --dataset-dir data/prebuilt/<dataset_id> `
   --experiment-id cnn1-production `
   --gpu-id 0 `

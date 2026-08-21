@@ -221,6 +221,59 @@ class WalkForwardConfig:
 
 
 @dataclass(frozen=True)
+class FoldSelectionConfig:
+    """训练阶段只负责选择数据包中已经生成的 folds。"""
+
+    start_fold: int = 1
+    num_folds: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.start_fold <= 0:
+            raise ValueError("folds.start_fold must be > 0")
+        if self.num_folds is not None and self.num_folds <= 0:
+            raise ValueError("folds.num_folds must be > 0")
+
+
+@dataclass(frozen=True)
+class DataBuildConfig:
+    """阶段一配置：从原始行情构建不可变数据集。"""
+
+    task: TaskConfig
+    data: DataConfig
+    cleaning: CleaningConfig
+    target: TargetConfig
+    sessions: SessionConfig
+    window: WindowConfig
+    features: FeatureConfig
+    normalization: NormalizationConfig
+    split: SplitConfig
+    walk_forward: WalkForwardConfig
+
+    @property
+    def ticker(self) -> str:
+        return self.task.ticker
+
+    @property
+    def target_column(self) -> str:
+        short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
+        return f"Target_{self.target.horizon_seconds}s_{short}"
+
+
+@dataclass(frozen=True)
+class ModelRunConfig:
+    """阶段二配置：消费数据集元数据并训练候选模型。"""
+
+    experiment_id: str
+    loader: LoaderConfig
+    model: ModelConfig
+    baselines: BaselineConfig
+    training: TrainingConfig
+    evaluation: EvaluationConfig
+    folds: FoldSelectionConfig = field(default_factory=FoldSelectionConfig)
+    seed: int = 42
+
+
+@dataclass(frozen=True)
 class ExperimentConfig:
     """整个实验的配置根（§42 冻结规格）。"""
 
@@ -262,3 +315,11 @@ class ExperimentConfig:
         """主标签列名（§7.1：唯一 primary target）。"""
         short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
         return f"Target_{self.target.horizon_seconds}s_{short}"
+
+    @property
+    def folds(self) -> FoldSelectionConfig:
+        """旧聚合配置到新训练 fold 选择契约的兼容视图。"""
+        return FoldSelectionConfig(
+            start_fold=self.walk_forward.start_fold,
+            num_folds=self.walk_forward.num_folds,
+        )
