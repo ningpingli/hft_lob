@@ -1,0 +1,42 @@
+# Default training template for DLA.
+loader:
+  batch_size: 128
+  num_workers: 0
+  pin_memory: false
+  persistent_workers: false
+  prefetch_factor: null
+
+model:
+  name: dla
+  output_dim: 1
+
+baselines:
+  names: [zero, imbalance, ridge]
+  ridge_alpha: 1.0
+
+training:
+  loss: huber
+  loss_huber_delta: 1.0
+  epochs: 50
+  patience: 10
+  monitor_metric: val/ts_ic
+  monitor_mode: max
+  learning_rate: 0.001
+  betas: [0.9, 0.95]
+  weight_decay: 0.00001
+  log_interval_epochs: 1
+
+evaluation:
+  metrics: [mae, rmse, ts_ic, rank_ic, direction_accuracy,
+            up_precision, up_recall, down_precision, down_recall]
+  report_daily: true
+  prediction_bins: 10
+  confidence_level: 0.95
+  bootstrap_samples: 1000
+  bootstrap_block_size: 20
+
+folds:
+  start_fold: 1
+  num_folds: null
+
+seed: 42

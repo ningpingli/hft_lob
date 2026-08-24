@@ -94,6 +94,18 @@ folds:
   num_folds: 1
 ```
 
+每个已注册模型都有可直接加载的默认模板，位于 `configs/models/`：
+`cnn1.yaml`、`cnn2.yaml`、`deeplob.yaml`、`transformer.yaml`、`itransformer.yaml`、
+`lobtransformer.yaml`、`axiallob.yaml`、`dla.yaml`、`binbtabl.yaml`、`binctabl.yaml`
+和 `hlob.yaml`。选择对应文件即可替代手工修改 `configs/model.yaml`，例如：
+
+```bash
+uv run hft_lob train \
+  --config configs/models/transformer.yaml \
+  --dataset-dir data/datasets/688981/<dataset_id> \
+  --experiment-id transformer-688981
+```
+
 启动训练：
 
 ```bash
