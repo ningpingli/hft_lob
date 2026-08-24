@@ -14,7 +14,8 @@
 需要 Python 3.12 和 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
-uv sync
+uv sync --dev
+uv run pre-commit install
 uv run hft_lob --help
 ```
 
@@ -129,6 +130,14 @@ loggers/results/<experiment_id>/
 ```
 
 ## 快速检查
+
+提交前运行全部 pre-commit 检查：
+
+```bash
+uv run pre-commit run --all-files
+```
+
+完整检查：
 
 ```bash
 uv run pytest -q
