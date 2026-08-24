@@ -27,7 +27,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self.embedding.weight = self._init_weight(self.embedding.weight)
 
     @staticmethod
-    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+    def _init_weight(out: torch.Tensor) -> torch.Tensor:
         """与 XLM 的 create_sinusoidal_embeddings 相同，只是特征不交错排列。
 
         cos 特征位于向量的后半部分，即 ``[dim // 2:]``。

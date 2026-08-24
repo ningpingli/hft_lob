@@ -38,6 +38,11 @@ code2llm_output/
 data/
 *.ckpt
 *.npz
+
 *.pt
 *.parquet
 uv.lock
+# GitHub Actions
+!.github/
+!.github/workflows/
+!.github/workflows/ci.yml

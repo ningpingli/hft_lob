@@ -1,0 +1,29 @@
+minimum_pre_commit_version: "4.0.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check src tests
+        language: system
+        files: ^(src|tests)/.*\.py$
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: uv run mypy src/hft_lob
+        language: system
+        files: ^src/hft_lob/.*\.py$
+        pass_filenames: false

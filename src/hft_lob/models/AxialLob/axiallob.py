@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import torch
 from torch import nn
@@ -97,9 +98,8 @@ class GatedAxialAttention(nn.Module):
             dim=2,
         )
 
-        # 相对位置嵌入
         all_embeddings = torch.index_select(
-            self.relative, 1, self.flatten_index
+            self.relative, 1, cast(torch.Tensor, self.flatten_index)
         ).view(self.dim_head_v * 2, self.dim, self.dim)
         q_embedding, k_embedding, v_embedding = torch.split(
             all_embeddings,

@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff", "mypy>=1.0"]
+dev = ["pytest>=7", "ruff", "mypy>=1.0", "pre-commit>=4.0"]
 
 [project.scripts]
 hft_lob = "hft_lob:main"
@@ -66,10 +66,16 @@ check_untyped_defs = true
 ignore_missing_imports = true
 files = ["src/hft_lob"]
 
+# Torch module operations are typed as Any by parts of the external stubs.
+[[tool.mypy.overrides]]
+module = ["hft_lob.models.*"]
+disable_error_code = ["no-any-return"]
+
 [dependency-groups]
 dev = [
     "code2llm>=0.5.176",
     "mypy>=2.3.1",
+    "pre-commit>=4.0",
     "pytest>=9.1.1",
     "ruff>=0.16.3",
 ]
