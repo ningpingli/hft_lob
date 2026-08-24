@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,13 +13,25 @@ from lightning.pytorch.loggers import Logger
 
 from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
 from hft_lob.configs.experiment import ModelRunConfig
-from hft_lob.datasets.dataset_validator import DatasetPackage, DatasetPackageMetadata
+from hft_lob.datasets.dataset_validator import (
+    DatasetPackage,
+    DatasetPackageMetadata,
+    stable_config_hash,
+)
 from hft_lob.models import build_model
-from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.systems.artifact import (
+    PredictionArtifact,
+    load_prediction_artifact,
+    save_prediction_artifact,
+)
 from hft_lob.systems.contracts import LOBBatch
 from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.walk_forward import CandidateFoldRun
+
+logger = logging.getLogger(__name__)
+
+_BASELINE_CACHE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -28,6 +41,7 @@ class DefaultWalkForwardExecutor:
     output_root: str
     accelerator: str = "auto"
     devices: int | str = 1
+    baseline_cache_root: str = "loggers/baselines"
 
     def run_candidate(
         self,
@@ -40,25 +54,55 @@ class DefaultWalkForwardExecutor:
         metadata = package.metadata
         output_dir = Path(self.output_root) / f"fold_{fold_index:03d}" / candidate_name
         output_dir.mkdir(parents=True, exist_ok=True)
-        datamodule = LOBDataModule(
-            package,
-            fold_index=fold_index,
-            loader=config.loader,
-            seed=config.seed,
-        )
         predictions_path = str((output_dir / "predictions.parquet").resolve())
         model_version = f"{config.experiment_id}-fold{fold_index}-{candidate_name}"
         state_path = str((package.root / "dataset.json").resolve())
 
         if candidate_name in BASELINE_NAMES:
-            artifact = self._run_baseline(
-                candidate_name=candidate_name,
+            cache_path, cache_key = self._baseline_cache_path(
                 metadata=metadata,
                 config=config,
-                datamodule=datamodule,
-                model_version=model_version,
                 fold_index=fold_index,
+                candidate_name=candidate_name,
             )
+            if cache_path.is_file():
+                cached = load_prediction_artifact(str(cache_path))
+                artifact = replace(cached, model_version=model_version)
+                logger.info(
+                    "baseline_cache.hit dataset_id=%s fold=%d candidate=%s path=%s",
+                    metadata.dataset_id,
+                    fold_index,
+                    candidate_name,
+                    cache_path,
+                )
+            else:
+                logger.info(
+                    "baseline_cache.miss dataset_id=%s fold=%d candidate=%s path=%s",
+                    metadata.dataset_id,
+                    fold_index,
+                    candidate_name,
+                    cache_path,
+                )
+                datamodule = LOBDataModule(
+                    package,
+                    fold_index=fold_index,
+                    loader=config.loader,
+                    seed=config.seed,
+                )
+                artifact = self._run_baseline(
+                    candidate_name=candidate_name,
+                    metadata=metadata,
+                    config=config,
+                    datamodule=datamodule,
+                    model_version=model_version,
+                    fold_index=fold_index,
+                )
+                cache_artifact = replace(
+                    artifact,
+                    model_version=f"baseline-cache-{cache_key}",
+                )
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                save_prediction_artifact(artifact=cache_artifact, path=str(cache_path))
             return CandidateFoldRun(
                 artifact=artifact,
                 dataset_metadata_path=state_path,
@@ -67,6 +111,12 @@ class DefaultWalkForwardExecutor:
 
         if candidate_name != config.model.name:
             raise ValueError(f"candidate {candidate_name!r} is neither model nor baseline")
+        datamodule = LOBDataModule(
+            package,
+            fold_index=fold_index,
+            loader=config.loader,
+            seed=config.seed,
+        )
         checkpoint = cast(
             ModelCheckpoint,
             build_checkpoint_callback(
@@ -117,6 +167,34 @@ class DefaultWalkForwardExecutor:
             checkpoint_path=str(Path(checkpoint_path).resolve()),
             predictions_path=predictions_path,
         )
+
+    def _baseline_cache_path(
+        self,
+        *,
+        metadata: DatasetPackageMetadata,
+        config: ModelRunConfig,
+        fold_index: int,
+        candidate_name: str,
+    ) -> tuple[Path, str]:
+        if not self.baseline_cache_root.strip():
+            raise ValueError("baseline_cache_root must not be empty")
+        full_cache_key = stable_config_hash(
+            {
+                "cache_version": _BASELINE_CACHE_VERSION,
+                "candidate_name": candidate_name,
+                "ridge_alpha": config.baselines.ridge_alpha,
+            }
+        )
+        cache_key = full_cache_key[:16]
+        path = (
+            Path(self.baseline_cache_root)
+            / metadata.dataset_id
+            / f"fold_{fold_index:03d}"
+            / candidate_name
+            / cache_key
+            / "predictions.parquet"
+        )
+        return path, cache_key
 
     @staticmethod
     def _run_baseline(

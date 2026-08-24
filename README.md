@@ -127,6 +127,11 @@ uv run hft_lob train \
 
 不传 `--gpu-id` 时由 Lightning 自动选择设备。同一份只读数据集可以被多个训练进程或不同模型同时消费，但每个进程应使用不同的 `experiment-id`。
 
+同一数据集和 fold 的 baseline 预测会缓存到
+`loggers/baselines/<dataset_id>/fold_<N>/<baseline>/<cache_key>/predictions.parquet`。
+后续训练其他模型时只加载该缓存，不会重复拟合和预测 baseline；`ridge_alpha` 或数据集版本变化
+会生成新的缓存键。
+
 训练结果保存在：
 
 ```text
