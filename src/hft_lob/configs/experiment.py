@@ -267,5 +267,3 @@ class ModelRunConfig:
     evaluation: EvaluationConfig
     folds: FoldSelectionConfig = field(default_factory=FoldSelectionConfig)
     seed: int = 42
-
-
