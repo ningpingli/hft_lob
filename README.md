@@ -124,10 +124,20 @@ loggers/results/<experiment_id>/
     └── fold_001/
         ├── <model>/
         │   ├── checkpoints/best_val_model.ckpt
-        │   └── predictions.parquet
+        │   ├── predictions.parquet
+        │   ├── evaluation.yaml
+        │   ├── daily_ic_curve.png
+        │   └── time_series_grouped_return_curve.png
         └── <baseline>/
-            └── predictions.parquet
+            ├── predictions.parquet
+            ├── evaluation.yaml
+            ├── daily_ic_curve.png
+            └── time_series_grouped_return_curve.png
 ```
+评测报告中的 `mean_daily_ic` 是各交易日 TS-IC 的有限值算术平均；`daily_ic_curve.png`
+绘制按日期排列的逐日 TS-IC，`time_series_grouped_return_curve.png` 绘制时序分组收益曲线。
+后者将评测窗口内的全部有效样本按预测值排序后分成 `k` 个等量 bin，绘制各 bin
+真实收益均值；它不是按每个时点做横截面排序的普通分组收益曲线。
 
 ## 快速检查
 

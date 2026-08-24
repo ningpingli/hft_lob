@@ -40,13 +40,21 @@ class ConfidenceInterval:
 
 
 @dataclass(frozen=True)
+class DailyICRecord:
+    """单个交易日的 TS-IC。"""
+
+    trade_date: str
+    sample_count: int
+    ic: float
+
+
+@dataclass(frozen=True)
 class DailyMetricRecord:
     """单个交易日的完整指标，保留样本数用于审计。"""
 
     trade_date: str
     sample_count: int
     metrics: dict[str, float]
-
 
 @dataclass(frozen=True)
 class PredictionBinRecord:
@@ -67,6 +75,8 @@ class EvaluationReport:
     sample_count: int
     overall: dict[str, float]
     daily: tuple[DailyMetricRecord, ...]
+    daily_ic: tuple[DailyICRecord, ...]
+    mean_daily_ic: float
     daily_summary: dict[str, float]
     confidence_intervals: dict[str, ConfidenceInterval]
     prediction_bins: tuple[PredictionBinRecord, ...]
@@ -148,6 +158,11 @@ def directional_precision_recall(
     return precision, recall
 
 
+def mean_daily_ic(daily_ics: np.ndarray) -> float:
+    """Mean Daily IC：有限交易日 TS-IC 的算术平均。"""
+    values = _finite_vector(daily_ics)
+    return float(np.mean(values)) if values.size else float("nan")
+
 def icir(daily_ics: np.ndarray) -> float:
     """ICIR = mean(daily_IC) / std(daily_IC)（§21 稳定性）。"""
     values = _finite_vector(daily_ics)
@@ -186,15 +201,37 @@ def evaluate(preds: np.ndarray, targets: np.ndarray) -> dict[str, float]:
     }
 
 
+def daily_ic_records(
+    preds: np.ndarray,
+    targets: np.ndarray,
+    trade_dates: np.ndarray,
+) -> tuple[DailyICRecord, ...]:
+    """按交易日计算 TS-IC，保持输入中交易日的首次出现顺序。"""
+    prediction, target = _paired_vectors(preds, targets)
+    dates = _metadata_vector(trade_dates, field="trade_dates", size=prediction.size)
+    records: list[DailyICRecord] = []
+    for trade_date in dict.fromkeys(dates.tolist()):
+        mask = dates == trade_date
+        records.append(
+            DailyICRecord(
+                trade_date=str(trade_date),
+                sample_count=int(np.count_nonzero(mask)),
+                ic=ts_ic(prediction[mask], target[mask]),
+            )
+        )
+    return tuple(records)
+
+
 def prediction_quantile_bins(
     preds: np.ndarray,
     targets: np.ndarray,
     *,
     n_bins: int = 10,
 ) -> tuple[PredictionBinRecord, ...]:
-    """按预测值分位数分桶并统计每桶实现收益（§23）。
+    """计算时序分组收益：全体时序样本按预测值排序后等量分 bin。
 
-    重复分位点必须使用确定性策略处理；返回记录按预测值从低到高排列。
+    这不是截面分组收益。所有有效时序样本先按预测值稳定排序，再切分为 ``n_bins`` 个
+    等量 bin；每个 bin 的真实收益均值用于绘制时序分组收益曲线。
 
     Raises:
         ValueError: n_bins < 2、输入长度不同或有效样本不足。
@@ -291,19 +328,20 @@ def build_evaluation_report(
     overall_all = evaluate(predictions, targets)
     overall = {name: overall_all[name] for name in config.metrics}
 
+    daily_ic = daily_ic_records(predictions, targets, trade_dates)
+    daily_ic_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
+    report_mean_daily_ic = mean_daily_ic(daily_ic_values)
     daily: tuple[DailyMetricRecord, ...] = ()
-    daily_summary: dict[str, float] = {}
+    daily_summary: dict[str, float] = {"mean_daily_ic": report_mean_daily_ic}
     if config.report_daily:
         records: list[DailyMetricRecord] = []
-        daily_ts_ics: list[float] = []
-        for trade_date in dict.fromkeys(trade_dates.tolist()):
-            mask = trade_dates == trade_date
+        for daily_record in daily_ic:
+            mask = trade_dates == daily_record.trade_date
             metrics = evaluate(predictions[mask], targets[mask])
-            daily_ts_ics.append(metrics["ts_ic"])
             records.append(
                 DailyMetricRecord(
-                    trade_date=str(trade_date),
-                    sample_count=int(np.count_nonzero(mask)),
+                    trade_date=daily_record.trade_date,
+                    sample_count=daily_record.sample_count,
                     metrics={name: metrics[name] for name in config.metrics},
                 )
             )
@@ -312,9 +350,8 @@ def build_evaluation_report(
             values = _finite_vector(np.asarray([record.metrics[name] for record in daily]))
             daily_summary[f"{name}_mean"] = float(np.mean(values)) if values.size else float("nan")
             daily_summary[f"{name}_std"] = float(np.std(values)) if values.size else float("nan")
-        daily_ics = np.asarray(daily_ts_ics)
-        daily_summary["icir"] = icir(daily_ics)
-        daily_summary["positive_ic_day_ratio"] = positive_ic_day_ratio(daily_ics)
+        daily_summary["icir"] = icir(daily_ic_values)
+        daily_summary["positive_ic_day_ratio"] = positive_ic_day_ratio(daily_ic_values)
 
     metric_functions: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
         "mae": mae,
@@ -346,6 +383,8 @@ def build_evaluation_report(
         sample_count=int(predictions.size),
         overall=overall,
         daily=daily,
+        daily_ic=daily_ic,
+        mean_daily_ic=report_mean_daily_ic,
         daily_summary=daily_summary,
         confidence_intervals=confidence_intervals,
         prediction_bins=bins,

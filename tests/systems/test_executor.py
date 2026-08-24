@@ -52,6 +52,12 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     assert Path(result.checkpoint_path or "").is_file()
     assert Path(result.predictions_path).is_file()
     assert result.evaluation.sample_count > 0
+    output_dir = Path(result.predictions_path).parent
+    assert (output_dir / "evaluation.yaml").is_file()
+    assert (output_dir / "daily_ic_curve.png").is_file()
+    assert (output_dir / "time_series_grouped_return_curve.png").is_file()
+    assert "mean_daily_ic" in result.evaluation.daily_summary
+    assert "mean_daily_ic_mean" in report.summary["cnn1"]
 
 
 def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:

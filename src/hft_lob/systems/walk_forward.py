@@ -14,6 +14,7 @@ import numpy as np
 from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig
 from hft_lob.datasets.dataset_validator import DatasetPackage
 from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
+from hft_lob.systems.evaluation_plots import save_evaluation_outputs
 from hft_lob.systems.metrics import EvaluationReport, build_evaluation_report
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,16 @@ def run_walk_forward(
                 config.evaluation,
                 seed=config.seed + fold_index,
             )
+            evaluation_outputs = save_evaluation_outputs(
+                evaluation,
+                Path(run.predictions_path).parent,
+            )
+            logger.info(
+                "walk_forward.evaluation_outputs fold=%d candidate=%s paths=%s",
+                fold_index,
+                candidate_name,
+                evaluation_outputs,
+            )
             results.append(
                 FoldResult(
                     fold_index=fold_index,
@@ -225,6 +236,17 @@ def _summarize_results(
                 sum(result.evaluation.sample_count for result in candidate_results)
             ),
         }
+        mean_daily_ics = np.asarray(
+            [result.evaluation.mean_daily_ic for result in candidate_results],
+            dtype=np.float64,
+        )
+        finite_mean_daily_ics = mean_daily_ics[np.isfinite(mean_daily_ics)]
+        values["mean_daily_ic_mean"] = (
+            float(np.mean(finite_mean_daily_ics)) if finite_mean_daily_ics.size else float("nan")
+        )
+        values["mean_daily_ic_std"] = (
+            float(np.std(finite_mean_daily_ics)) if finite_mean_daily_ics.size else float("nan")
+        )
         for metric in metrics:
             metric_values = np.asarray(
                 [result.evaluation.overall[metric] for result in candidate_results],
