@@ -149,7 +149,7 @@ class TrainingConfig:
 
 @dataclass(frozen=True)
 class EvaluationConfig:
-    """评估指标（§21）：TS-IC / RankIC / MAE / RMSE / Direction + 稳定性。"""
+    """评估指标（§21）：基础指标、Mean Daily IC、逐日曲线与时序分组收益曲线。"""
 
     metrics: tuple[str, ...] = (
         "mae", "rmse", "ts_ic", "rank_ic", "direction_accuracy",

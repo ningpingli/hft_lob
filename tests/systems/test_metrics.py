@@ -11,11 +11,13 @@ from hft_lob.systems.contracts import SampleMeta
 from hft_lob.systems.metrics import (
     block_bootstrap_confidence_interval,
     build_evaluation_report,
+    daily_ic_records,
     direction_accuracy,
     directional_precision_recall,
     evaluate,
     icir,
     mae,
+    mean_daily_ic,
     positive_ic_day_ratio,
     prediction_quantile_bins,
     rank_ic,
@@ -64,6 +66,17 @@ def test_daily_ic_stability() -> None:
     daily = np.array([0.2, 0.4, np.nan])
     assert icir(daily) == pytest.approx(3.0)
     assert positive_ic_day_ratio(daily) == pytest.approx(1.0)
+
+def test_mean_daily_ic_uses_finite_daily_ts_ics() -> None:
+    records = daily_ic_records(
+        np.array([1.0, 2.0, 1.0, 4.0, np.nan]),
+        np.array([1.0, 3.0, 4.0, 2.0, 5.0]),
+        np.array(["2025-01-01", "2025-01-01", "2025-01-02", "2025-01-02", "2025-01-02"]),
+    )
+
+    assert [record.trade_date for record in records] == ["2025-01-01", "2025-01-02"]
+    assert [record.ic for record in records] == pytest.approx([1.0, -1.0])
+    assert mean_daily_ic(np.array([record.ic for record in records])) == pytest.approx(0.0)
 
 
 def test_evaluate_has_all_metric_names() -> None:
@@ -144,6 +157,9 @@ def test_build_evaluation_report() -> None:
     )
 
     report = build_evaluation_report(artifact, config, seed=42)
+    assert report.mean_daily_ic == pytest.approx(1.0)
+    assert [record.ic for record in report.daily_ic] == pytest.approx([1.0, 1.0])
+    assert report.daily_summary["mean_daily_ic"] == pytest.approx(1.0)
 
     assert report.sample_count == 8
     assert report.overall["mae"] == 0.0
