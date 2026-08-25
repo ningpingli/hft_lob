@@ -7,7 +7,6 @@ import torch
 from torch import nn
 
 from hft_lob.configs.experiment import (
-    BaselineConfig,
     EvaluationConfig,
     LoaderConfig,
     ModelConfig,
@@ -32,7 +31,6 @@ def _config() -> ModelRunConfig:
         experiment_id="lob-module-test",
         loader=LoaderConfig(),
         model=ModelConfig(name="cnn1"),
-        baselines=BaselineConfig(),
         training=TrainingConfig(epochs=1),
         evaluation=EvaluationConfig(
             metrics=("mae", "ts_ic", "direction_accuracy"),

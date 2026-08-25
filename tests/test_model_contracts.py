@@ -14,7 +14,6 @@ import pytest
 import torch
 
 from hft_lob.configs.experiment import (
-    BaselineConfig,
     EvaluationConfig,
     LoaderConfig,
     ModelConfig,
@@ -50,7 +49,6 @@ def _make_config(model_name: str) -> ModelRunConfig:
         experiment_id="test",
         loader=LoaderConfig(),
         model=ModelConfig(name=model_name),
-        baselines=BaselineConfig(),
         training=TrainingConfig(),
         evaluation=EvaluationConfig(),
     )

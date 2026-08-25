@@ -8,10 +8,12 @@ import logging
 from collections.abc import Sequence
 
 from hft_lob.application import (
+    BaselineRunRequest,
     DatasetBuildRequest,
     TrainingRequest,
     build_dataset,
     inspect_dataset,
+    run_baseline_application,
     run_training_application,
     verify_dataset,
 )
@@ -29,6 +31,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     for name in ("verify", "inspect"):
         command = data_commands.add_parser(name)
         command.add_argument("--dataset-dir", required=True)
+
+    baseline = commands.add_parser("baseline", help="create shared dataset-level baselines")
+    baseline_commands = baseline.add_subparsers(dest="baseline_command", required=True)
+    baseline_run = baseline_commands.add_parser("run")
+    baseline_run.add_argument("--config", default="configs/baselines.yaml")
+    baseline_run.add_argument("--dataset-dir", required=True)
+    baseline_run.add_argument("--experiment-id")
+    baseline_run.add_argument("--seed", type=int)
+    baseline_run.add_argument("--replace-default", action="store_true")
 
     train = commands.add_parser("train", help="train models from an immutable dataset")
     train.add_argument("--config", default="configs/model.yaml")
@@ -48,6 +59,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
     if args.command == "data":
         _run_data_command(args)
+        return
+    if args.command == "baseline":
+        baseline_result = run_baseline_application(
+            BaselineRunRequest(
+                config_path=args.config,
+                dataset_dir=args.dataset_dir,
+                experiment_id=args.experiment_id,
+                seed=args.seed,
+                replace_default=args.replace_default,
+            )
+        )
+        print(f"baseline_manifest={baseline_result.manifest_path}")
         return
 
     result = run_training_application(

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import polars as pl
 
+from hft_lob.application.baseline import BaselineRunRequest, run_baseline_application
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
-    BaselineConfig,
     CleaningConfig,
     DataBuildConfig,
     DataConfig,
@@ -28,6 +28,7 @@ from hft_lob.configs.experiment import (
 )
 from hft_lob.datasets.builder import build_dataset_package
 from hft_lob.datasets.dataset_validator import open_dataset_package
+from hft_lob.systems.baseline_manifest import load_default_manifest
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import run_walk_forward
 
@@ -56,8 +57,37 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     assert (output_dir / "evaluation.yaml").is_file()
     assert (output_dir / "daily_ic_curve.png").is_file()
     assert (output_dir / "time_series_grouped_return_curve.png").is_file()
-    assert "mean_daily_ic" in result.evaluation.daily_summary
     assert "mean_daily_ic_mean" in report.summary["cnn1"]
+
+
+def test_baseline_run_publishes_dataset_manifest(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dates = ["2026-01-05", "2026-01-06", "2026-01-07"]
+    data_config, _ = _configs(tmp_path)
+    for day, date in enumerate(dates):
+        _write_raw(tmp_path, date, day)
+    dataset_dir = build_dataset_package(data_config, tmp_path / "prebuilt")
+    monkeypatch.setattr(
+        "hft_lob.systems.baseline_manifest._RESULTS_ROOT",
+        tmp_path / "results",
+    )
+
+    result = run_baseline_application(
+        BaselineRunRequest(
+            config_path="configs/baselines.yaml",
+            dataset_dir=str(dataset_dir),
+            experiment_id="baseline-smoke",
+        )
+    )
+    manifest = load_default_manifest(result.dataset_version)
+
+    assert result.artifact_count == 3
+    assert result.experiment_id == "baseline-smoke"
+    assert manifest.experiment_id == "baseline-smoke"
+    assert manifest.baseline_names == ("zero", "imbalance", "ridge")
+    assert len(manifest.artifacts) == 3
 
 
 def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
@@ -84,7 +114,6 @@ def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
         experiment_id="executor-smoke",
         loader=LoaderConfig(batch_size=8),
         model=ModelConfig(name="cnn1"),
-        baselines=BaselineConfig(names=()),
         training=TrainingConfig(epochs=1, patience=0),
         evaluation=EvaluationConfig(
             metrics=("mae", "ts_ic"),

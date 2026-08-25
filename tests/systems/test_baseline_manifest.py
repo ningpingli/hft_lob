@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from hft_lob.datasets.dataset_validator import (
+    DatasetPackage,
+    DatasetPackageMetadata,
+    compute_dataset_id,
+)
+from hft_lob.systems.artifact import PredictionArtifact, save_prediction_artifact
+from hft_lob.systems.baseline_manifest import (
+    BaselineArtifactReference,
+    BaselineManifest,
+    baseline_space,
+    default_manifest_path,
+    load_default_manifest,
+    save_default_manifest,
+    validate_default_manifest,
+)
+from hft_lob.systems.contracts import SampleMeta
+
+
+def test_default_manifest_round_trips_and_validates_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("hft_lob.systems.baseline_manifest._RESULTS_ROOT", tmp_path / "results")
+    metadata = _metadata()
+    package = DatasetPackage(root=tmp_path / metadata.dataset_id, metadata=metadata)
+    root = baseline_space(metadata.dataset_id)
+    prediction_path = root / "runs" / "baseline-1" / "fold_001" / "zero" / "predictions.parquet"
+    save_prediction_artifact(artifact=_artifact(metadata), path=str(prediction_path))
+    manifest = BaselineManifest(
+        dataset_id=metadata.dataset_id,
+        experiment_id="baseline-1",
+        config_hash="config-hash",
+        fold_indices=(1,),
+        baseline_names=("zero",),
+        artifacts=(
+            BaselineArtifactReference(
+                fold_index=1,
+                baseline_name="zero",
+                predictions_path=prediction_path.relative_to(root).as_posix(),
+                evaluation_path="runs/baseline-1/fold_001/zero/evaluation.yaml",
+                overall={"ts_ic": 0.2},
+                mean_daily_ic=0.1,
+            ),
+        ),
+    )
+
+    save_default_manifest(manifest)
+    loaded = load_default_manifest(metadata.dataset_id)
+    validated = validate_default_manifest(package, fold_indices=(1,))
+
+    assert loaded == manifest
+    assert validated == manifest
+    assert default_manifest_path(metadata.dataset_id).is_file()
+
+
+def test_manifest_rejects_missing_requested_fold(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("hft_lob.systems.baseline_manifest._RESULTS_ROOT", tmp_path / "results")
+    metadata = _metadata()
+    package = DatasetPackage(root=tmp_path / metadata.dataset_id, metadata=metadata)
+    save_default_manifest(
+        BaselineManifest(
+            dataset_id=metadata.dataset_id,
+            experiment_id="baseline-1",
+            config_hash="config-hash",
+            fold_indices=(1,),
+            baseline_names=("zero",),
+            artifacts=(),
+        )
+    )
+
+    with pytest.raises(ValueError, match="missing requested folds"):
+        validate_default_manifest(package, fold_indices=(1, 2))
+
+
+def _artifact(metadata: DatasetPackageMetadata) -> PredictionArtifact:
+    return PredictionArtifact(
+        predictions=np.array([0.1]),
+        targets=np.array([0.2]),
+        metadata=(
+            SampleMeta(
+                ticker=metadata.ticker,
+                trade_date="2026-01-05",
+                session_id="AM",
+                anchor_timestamp="2026-01-05T09:30:00",
+                mid_t=10.0,
+                future_mid=10.1,
+                bid1=9.9,
+                ask1=10.1,
+                spread=0.2,
+            ),
+        ),
+        model_name="zero",
+        model_version="baseline-1-fold1-zero",
+        dataset_version=metadata.dataset_id,
+        fold_index=1,
+        split="test",
+    )
+
+
+def _metadata() -> DatasetPackageMetadata:
+    ticker = "TEST"
+    source_hash = "source"
+    processing_config_hash = "processing"
+    fold_plan_hash = "fold-plan"
+    return DatasetPackageMetadata(
+        dataset_id=compute_dataset_id(
+            ticker=ticker,
+            source_hash=source_hash,
+            processing_config_hash=processing_config_hash,
+            fold_plan_hash=fold_plan_hash,
+        ),
+        ticker=ticker,
+        feature_columns=("f0", "f1", "f2", "f3"),
+        target_column="target",
+        feature_dtype="float32",
+        target_dtype="float32",
+        snapshot_interval_seconds=3,
+        history_snapshots=2,
+        normalization_mode="causal_rolling",
+        normalization_window=2,
+        source_hash=source_hash,
+        processing_config_hash=processing_config_hash,
+        fold_plan_hash=fold_plan_hash,
+    )

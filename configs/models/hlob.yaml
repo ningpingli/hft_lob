@@ -11,9 +11,6 @@ model:
   name: hlob
   output_dim: 1
 
-baselines:
-  names: [zero, imbalance, ridge]
-  ridge_alpha: 1.0
 
 training:
   loss: huber

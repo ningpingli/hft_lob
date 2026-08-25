@@ -131,6 +131,8 @@ class BaselineConfig:
     ridge_alpha: float = 1.0
 
 
+
+
 @dataclass(frozen=True)
 class TrainingConfig:
     """训练（§20/§29）：primary loss = huber；全随机种子。"""
@@ -229,6 +231,16 @@ class FoldSelectionConfig:
         if self.num_folds is not None and self.num_folds <= 0:
             raise ValueError("folds.num_folds must be > 0")
 
+@dataclass(frozen=True)
+class BaselineRunConfig:
+    """共享 baseline 实验配置：一次覆盖全部 baseline 与选定 fold。"""
+
+    experiment_id: str
+    loader: LoaderConfig
+    baselines: BaselineConfig
+    evaluation: EvaluationConfig
+    folds: FoldSelectionConfig = field(default_factory=FoldSelectionConfig)
+    seed: int = 42
 
 @dataclass(frozen=True)
 class DataBuildConfig:
@@ -262,7 +274,6 @@ class ModelRunConfig:
     experiment_id: str
     loader: LoaderConfig
     model: ModelConfig
-    baselines: BaselineConfig
     training: TrainingConfig
     evaluation: EvaluationConfig
     folds: FoldSelectionConfig = field(default_factory=FoldSelectionConfig)
