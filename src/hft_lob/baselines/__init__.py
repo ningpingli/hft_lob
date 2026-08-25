@@ -12,14 +12,14 @@ from hft_lob.baselines.models import (
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
-from hft_lob.configs.experiment import ModelRunConfig
+from hft_lob.configs.experiment import BaselineConfig
 
 BASELINE_NAMES: tuple[str, ...] = ("zero", "imbalance", "ridge")
 
 
 def build_baseline(
     name: str,
-    config: ModelRunConfig,
+    config: BaselineConfig,
     *,
     feature_columns: Sequence[str],
     history_snapshots: int,
@@ -58,7 +58,7 @@ def build_baseline(
         return RidgeBaseline(
             num_features=num_features,
             history_snapshots=history,
-            alpha=config.baselines.ridge_alpha,
+            alpha=config.ridge_alpha,
         )
     raise AssertionError("unreachable baseline branch")
 

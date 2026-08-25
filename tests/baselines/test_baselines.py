@@ -10,15 +10,7 @@ from hft_lob.baselines.models import (
     ZeroBaseline,
 )
 from hft_lob.baselines.runner import BaselineRunner
-from hft_lob.configs.experiment import (
-    BaselineConfig,
-    EvaluationConfig,
-    FoldSelectionConfig,
-    LoaderConfig,
-    ModelConfig,
-    ModelRunConfig,
-    TrainingConfig,
-)
+from hft_lob.configs.experiment import BaselineConfig
 from hft_lob.systems.contracts import LOBBatch, SampleMeta
 
 
@@ -124,19 +116,10 @@ def test_all_baselines_reject_empty_training_batches() -> None:
 
 
 def test_factory_rejects_removed_mlp_baseline() -> None:
-    config = ModelRunConfig(
-        experiment_id="baseline-test",
-        loader=LoaderConfig(),
-        model=ModelConfig(),
-        baselines=BaselineConfig(),
-        training=TrainingConfig(),
-        evaluation=EvaluationConfig(),
-        folds=FoldSelectionConfig(),
-    )
     with pytest.raises(ValueError, match="unsupported baseline"):
         build_baseline(
             "mlp",
-            config,
+            BaselineConfig(),
             feature_columns=("BIDs1", "ASKs1"),
             history_snapshots=3,
         )

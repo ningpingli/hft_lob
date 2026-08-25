@@ -10,8 +10,8 @@ import lightning as L
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import Logger
 
-from hft_lob.baselines import BASELINE_NAMES, BaselineRunner, build_baseline
-from hft_lob.configs.experiment import ModelRunConfig
+from hft_lob.baselines import BaselineRunner, build_baseline
+from hft_lob.configs.experiment import BaselineConfig, BaselineRunConfig, ModelRunConfig
 from hft_lob.datasets.dataset_validator import DatasetPackage, DatasetPackageMetadata
 from hft_lob.models import build_model
 from hft_lob.systems.artifact import PredictionArtifact
@@ -50,23 +50,9 @@ class DefaultWalkForwardExecutor:
         model_version = f"{config.experiment_id}-fold{fold_index}-{candidate_name}"
         state_path = str((package.root / "dataset.json").resolve())
 
-        if candidate_name in BASELINE_NAMES:
-            artifact = self._run_baseline(
-                candidate_name=candidate_name,
-                metadata=metadata,
-                config=config,
-                datamodule=datamodule,
-                model_version=model_version,
-                fold_index=fold_index,
-            )
-            return CandidateFoldRun(
-                artifact=artifact,
-                dataset_metadata_path=state_path,
-                predictions_path=predictions_path,
-            )
-
         if candidate_name != config.model.name:
-            raise ValueError(f"candidate {candidate_name!r} is neither model nor baseline")
+            raise ValueError(f"candidate {candidate_name!r} is not the configured model")
+
         checkpoint = cast(
             ModelCheckpoint,
             build_checkpoint_callback(
@@ -118,12 +104,43 @@ class DefaultWalkForwardExecutor:
             predictions_path=predictions_path,
         )
 
+    def run_baseline_candidate(
+        self,
+        *,
+        package: DatasetPackage,
+        config: BaselineRunConfig,
+        fold_index: int,
+        candidate_name: str,
+    ) -> CandidateFoldRun:
+        metadata = package.metadata
+        output_dir = Path(self.output_root) / f"fold_{fold_index:03d}" / candidate_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        datamodule = LOBDataModule(
+            package,
+            fold_index=fold_index,
+            loader=config.loader,
+            seed=config.seed,
+        )
+        artifact = self._run_baseline(
+            candidate_name=candidate_name,
+            metadata=metadata,
+            config=config.baselines,
+            datamodule=datamodule,
+            model_version=f"{config.experiment_id}-fold{fold_index}-{candidate_name}",
+            fold_index=fold_index,
+        )
+        return CandidateFoldRun(
+            artifact=artifact,
+            dataset_metadata_path=str((package.root / "dataset.json").resolve()),
+            predictions_path=str((output_dir / "predictions.parquet").resolve()),
+        )
+
     @staticmethod
     def _run_baseline(
         *,
         candidate_name: str,
         metadata: DatasetPackageMetadata,
-        config: ModelRunConfig,
+        config: BaselineConfig,
         datamodule: LOBDataModule,
         model_version: str,
         fold_index: int,

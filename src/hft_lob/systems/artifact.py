@@ -12,6 +12,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import polars as pl
@@ -168,6 +169,67 @@ def save_prediction_artifact(
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
     return str(destination.resolve())
+
+def load_prediction_artifact(path: str) -> PredictionArtifact:
+    """Load and validate a previously saved prediction artifact."""
+    source = Path(path)
+    if source.suffix.lower() != ".parquet":
+        raise ValueError("prediction artifact path must end with .parquet")
+    if not source.is_file():
+        raise FileNotFoundError(source)
+
+    frame = pl.read_parquet(source)
+    missing = sorted(set(_ARTIFACT_SCHEMA).difference(frame.columns))
+    if missing:
+        raise ValueError(f"prediction artifact is missing columns: {missing}")
+    frame = frame.select(list(_ARTIFACT_SCHEMA))
+    if frame.height == 0:
+        raise ValueError("prediction artifact must not be empty")
+
+    identity = {
+        field: _single_artifact_field(frame, field)
+        for field in ("model_name", "model_version", "dataset_version", "fold_index", "split")
+    }
+    metadata = tuple(
+        SampleMeta(
+            ticker=str(row["ticker"]),
+            trade_date=str(row["trade_date"]),
+            session_id=str(row["session_id"]),
+            anchor_timestamp=_format_anchor_timestamp(row["anchor_timestamp"]),
+            mid_t=float(row["mid_t"]),
+            future_mid=float(row["future_mid"]),
+            bid1=float(row["bid1"]),
+            ask1=float(row["ask1"]),
+            spread=float(row["spread"]),
+        )
+        for row in frame.to_dicts()
+    )
+    return PredictionArtifact(
+        predictions=np.asarray(frame["prediction"].to_numpy(), dtype=np.float64),
+        targets=np.asarray(frame["target"].to_numpy(), dtype=np.float64),
+        metadata=metadata,
+        model_name=str(identity["model_name"]),
+        model_version=str(identity["model_version"]),
+        dataset_version=str(identity["dataset_version"]),
+        fold_index=cast(int, identity["fold_index"]),
+        split=str(identity["split"]),
+    )
+
+
+def _single_artifact_field(frame: pl.DataFrame, field: str) -> object:
+    values = frame.get_column(field).unique().to_list()
+    if len(values) != 1 or values[0] is None:
+        raise ValueError(f"prediction artifact field must be constant: {field}")
+    return values[0]
+
+
+def _format_anchor_timestamp(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        _parse_anchor_timestamp(value)
+        return value
+    raise ValueError(f"invalid anchor_timestamp: {value!r}")
 
 
 def _as_vector(values: np.ndarray, *, field: str) -> np.ndarray:

@@ -77,22 +77,43 @@ uv run hft_lob data verify --dataset-dir data/datasets/688981/<dataset_id>
 uv run hft_lob data inspect --dataset-dir data/datasets/688981/<dataset_id>
 ```
 
-## 阶段二：训练模型
+## 阶段二：共享 baseline 实验
 
-在 `configs/model.yaml` 中选择模型、baseline、训练参数和 fold 范围：
+baseline 必须先于模型实验生成。一次 baseline 实验覆盖配置中的全部 baseline 和 fold：
+
+```bash
+uv run hft_lob baseline run \
+  --config configs/baselines.yaml \
+  --dataset-dir data/datasets/688981/<dataset_id> \
+  --experiment-id baseline-688981
+```
+
+如果 baseline 配置 hash 与当前 default 不同，必须显式替换：
+
+```bash
+uv run hft_lob baseline run \
+  --config configs/baselines.yaml \
+  --dataset-dir data/datasets/688981/<dataset_id> \
+  --experiment-id baseline-688981-v2 \
+  --replace-default
+```
+
+## 阶段三：训练模型
+
+模型配置只包含模型、训练、评测和 fold 选择，不再包含 baseline candidate：
 
 ```yaml
 model:
   name: cnn1
   output_dim: 1
 
-baselines:
-  names: [zero, imbalance]
-
 folds:
   start_fold: 1
   num_folds: 1
 ```
+
+模型启动前会校验数据集 default baseline manifest、请求 fold 覆盖范围及所有 baseline artifact；
+缺失或不一致时不会开始模型训练。
 
 每个已注册模型都有可直接加载的默认模板，位于 `configs/models/`：
 `cnn1.yaml`、`cnn2.yaml`、`deeplob.yaml`、`transformer.yaml`、`itransformer.yaml`、
@@ -127,24 +148,33 @@ uv run hft_lob train \
 
 不传 `--gpu-id` 时由 Lightning 自动选择设备。同一份只读数据集可以被多个训练进程或不同模型同时消费，但每个进程应使用不同的 `experiment-id`。
 
-训练结果保存在：
+
+模型训练结果保存在：
 
 ```text
 loggers/results/<experiment_id>/
 ├── config_used.yaml
 └── walk_forward/
     └── fold_001/
-        ├── <model>/
-        │   ├── checkpoints/best_val_model.ckpt
-        │   ├── predictions.parquet
-        │   ├── evaluation.yaml
-        │   ├── daily_ic_curve.png
-        │   └── time_series_grouped_return_curve.png
-        └── <baseline>/
+        └── <model>/
+            ├── checkpoints/best_val_model.ckpt
             ├── predictions.parquet
             ├── evaluation.yaml
             ├── daily_ic_curve.png
             └── time_series_grouped_return_curve.png
+```
+
+共享 baseline 结果和权威引用保存在数据集实验空间：
+
+```text
+loggers/results/<dataset_id>/baseline/
+├── manifest.yaml
+└── runs/
+    └── <baseline_run_id>/
+        └── fold_001/
+            ├── zero/
+            ├── imbalance/
+            └── ridge/
 ```
 评测报告中的 `mean_daily_ic` 是各交易日 TS-IC 的有限值算术平均；`daily_ic_curve.png`
 绘制按日期排列的逐日 TS-IC，`time_series_grouped_return_curve.png` 绘制时序分组收益曲线。

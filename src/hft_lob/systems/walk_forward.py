@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CandidateFoldRun:
-    """执行器交给编排层的单次预测结果。
+    """执行器交给编排层的单次模型预测结果。
 
-    执行器只负责训练/推理以及给出输出位置；artifact 保存、评估和跨 fold
-    汇总由本模块统一完成，模型和 baseline 不得各自维护另一套评估路径。
+    执行器只负责模型训练/推理；artifact 保存、评估和跨 fold 汇总由本模块统一完成。
+    baseline 由独立 baseline experiment 生成，不进入模型 candidate 列表。
     """
 
     artifact: PredictionArtifact
@@ -35,7 +35,7 @@ class CandidateFoldRun:
 
 
 class WalkForwardExecutor(Protocol):
-    """模型和 baseline 共用的 fold 执行边界。"""
+    """模型实验的 fold 执行边界。"""
 
     def run_candidate(
         self,
@@ -45,7 +45,7 @@ class WalkForwardExecutor(Protocol):
         fold_index: int,
         candidate_name: str,
     ) -> CandidateFoldRun:
-        """在一个 fold 上拟合并返回 test split 的预测。"""
+        """在一个 fold 上拟合并返回模型 test split 的预测。"""
         ...
 
 
@@ -77,19 +77,11 @@ def run_walk_forward(
     *,
     executor: WalkForwardExecutor,
 ) -> WalkForwardReport:
-    """执行统一闭环。
-
-    每个 fold 独立解析文件；特征使用仅依赖当前时刻之前窗口的因果标准化；主模型及配置中的所有
-    Zero/Imbalance/Ridge/MLP 均属于 baseline，由 baseline runner 统一适配；主模型
-    经 LOBLightningModule 执行。所有 candidate 生成同一 PredictionArtifact parquet，
-    再由 build_evaluation_report 评估。禁止跨 fold 复用 checkpoint。
-    checkpoint 和 early stopping 必须使用 ``config.training.monitor_metric`` 与
-    ``config.training.monitor_mode``，不允许 runner 自行定义另一套指标名。
-    """
+    """执行模型 walk-forward 闭环；baseline 已由启动前 manifest 校验保证可用。"""
     root = package.root
     metadata = package.metadata
-    fold_indices = _select_package_folds(root, config.folds)
-    candidates = _candidate_names(config)
+    fold_indices = select_package_folds(root, config.folds)
+    candidates = (config.model.name,)
     logger.info(
         "walk_forward.start dataset_id=%s folds=%s candidates=%s",
         metadata.dataset_id,
@@ -161,7 +153,7 @@ def run_walk_forward(
     )
 
 
-def _select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int, ...]:
+def select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int, ...]:
     available = tuple(
         sorted(int(path.name.removeprefix("fold_")) for path in (root / "folds").glob("fold_*"))
     )
@@ -178,17 +170,6 @@ def _select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int,
             f"walk_forward.num_folds requests {config.num_folds}, only {len(selected)} available"
         )
     return selected
-
-
-def _candidate_names(config: ModelRunConfig) -> tuple[str, ...]:
-    names = (config.model.name, *config.baselines.names)
-    invalid = [name for name in names if not name.strip()]
-    if invalid:
-        raise ValueError("model and baseline names must not be empty")
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ValueError(f"candidate names must be unique: {duplicates}")
-    return names
 
 
 def _validate_candidate_run(

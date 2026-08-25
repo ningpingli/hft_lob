@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from hft_lob.configs.loader import load_data_config, load_model_config
+from hft_lob.configs.loader import load_baseline_config, load_data_config, load_model_config
 
 
 def test_loads_two_stage_repository_configs() -> None:
@@ -15,7 +15,8 @@ def test_loads_two_stage_repository_configs() -> None:
     assert data.sessions.morning == ("09:30:00", "11:30:00")
     assert model.experiment_id == "loader-test"
     assert model.training.betas == (0.9, 0.95)
-    assert model.baselines.names == ("zero", "imbalance", "ridge")
+    baseline = load_baseline_config("configs/baselines.yaml", experiment_id="baseline-test")
+    assert baseline.baselines.names == ("zero", "imbalance", "ridge")
 
 
 def test_rejects_unknown_config_fields(tmp_path: Path) -> None:

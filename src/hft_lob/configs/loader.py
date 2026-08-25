@@ -10,6 +10,7 @@ import yaml
 
 from hft_lob.configs.experiment import (
     BaselineConfig,
+    BaselineRunConfig,
     CleaningConfig,
     DataBuildConfig,
     DataConfig,
@@ -33,7 +34,8 @@ _DATA_SECTIONS = {
     "task", "data", "cleaning", "target", "sessions", "window", "features",
     "normalization", "split", "walk_forward",
 }
-_MODEL_SECTIONS = {"loader", "model", "baselines", "training", "evaluation", "folds", "seed"}
+_MODEL_SECTIONS = {"loader", "model", "training", "evaluation", "folds", "seed"}
+_BASELINE_SECTIONS = {"loader", "baselines", "evaluation", "folds", "seed"}
 
 def load_data_config(config_path: str) -> DataBuildConfig:
     """加载阶段一配置；拒绝混入任何训练字段。"""
@@ -68,12 +70,10 @@ def load_data_config(config_path: str) -> DataBuildConfig:
 
 
 def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig:
-    """加载阶段二配置；数据形状和标的身份由 dataset.json 提供。"""
+    """加载阶段二模型配置；不包含 baseline 生成配置。"""
     if not experiment_id.strip():
         raise ValueError("experiment_id must not be empty")
     raw = _load_mapping(config_path, _MODEL_SECTIONS)
-    baselines = _section(raw, "baselines")
-    _tuple_field(baselines, "names")
     training = _section(raw, "training")
     _tuple_field(training, "betas")
     evaluation = _section(raw, "evaluation")
@@ -83,7 +83,6 @@ def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig
             experiment_id=experiment_id,
             loader=LoaderConfig(**_section(raw, "loader")),
             model=ModelConfig(**_section(raw, "model")),
-            baselines=BaselineConfig(**baselines),
             training=TrainingConfig(**training),
             evaluation=EvaluationConfig(**evaluation),
             folds=FoldSelectionConfig(**_section(raw, "folds")),
@@ -91,6 +90,32 @@ def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig
         )
     except TypeError as exc:
         raise ValueError(f"invalid config field: {exc}") from exc
+    _validate_model_config(config)
+    return config
+
+
+def load_baseline_config(config_path: str, *, experiment_id: str) -> BaselineRunConfig:
+    """加载独立 baseline 实验配置。"""
+    if not experiment_id.strip():
+        raise ValueError("experiment_id must not be empty")
+    raw = _load_mapping(config_path, _BASELINE_SECTIONS)
+    baselines = _section(raw, "baselines")
+    _tuple_field(baselines, "names")
+    evaluation = _section(raw, "evaluation")
+    _tuple_field(evaluation, "metrics")
+    try:
+        config = BaselineRunConfig(
+            experiment_id=experiment_id,
+            loader=LoaderConfig(**_section(raw, "loader")),
+            baselines=BaselineConfig(**baselines),
+            evaluation=EvaluationConfig(**evaluation),
+            folds=FoldSelectionConfig(**_section(raw, "folds")),
+            seed=raw.get("seed", 42),
+        )
+    except TypeError as exc:
+        raise ValueError(f"invalid config field: {exc}") from exc
+    _validate_baseline_config(config)
+    return config
     _validate_model_config(config)
     return config
 
@@ -165,3 +190,23 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         for beta in config.training.betas
     ):
         raise ValueError("training.betas must contain two values in [0, 1)")
+    if len(config.evaluation.metrics) == 0:
+        raise ValueError("evaluation.metrics must not be empty")
+
+def _validate_baseline_config(config: BaselineRunConfig) -> None:
+    if config.loader.batch_size <= 0:
+        raise ValueError("loader.batch_size must be > 0")
+    if not config.baselines.names:
+        raise ValueError("baselines.names must not be empty")
+    if len(set(config.baselines.names)) != len(config.baselines.names):
+        raise ValueError("baselines.names must be unique")
+    allowed = {"zero", "imbalance", "ridge"}
+    unknown = sorted(set(config.baselines.names).difference(allowed))
+    if unknown:
+        raise ValueError(f"unsupported baseline names: {unknown}")
+    if config.baselines.ridge_alpha <= 0:
+        raise ValueError("baselines.ridge_alpha must be > 0")
+    if isinstance(config.seed, bool) or not isinstance(config.seed, int) or not 0 <= config.seed < 2**32:
+        raise ValueError("seed must be an integer in [0, 2**32)")
+    if len(config.evaluation.metrics) == 0:
+        raise ValueError("evaluation.metrics must not be empty")

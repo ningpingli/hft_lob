@@ -40,8 +40,12 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
     # GPU 可见设备设置完成后再导入 Torch/Lightning 依赖链。
     from hft_lob.configs import load_model_config
     from hft_lob.datasets.dataset_validator import load_dataset_package
+    from hft_lob.systems.baseline_manifest import (
+        default_manifest_path,
+        validate_default_manifest,
+    )
     from hft_lob.systems.executor import DefaultWalkForwardExecutor
-    from hft_lob.systems.walk_forward import run_walk_forward
+    from hft_lob.systems.walk_forward import run_walk_forward, select_package_folds
     from hft_lob.utils.checkpoint_utils import backup_experiment_config
     from hft_lob.utils.experiment_manager import (
         resolve_experiment_id,
@@ -68,6 +72,11 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
         experiment_id=experiment_id,
         seed=config.seed if request.seed is None else request.seed,
     )
+    selected_folds = select_package_folds(package.root, config.folds)
+    baseline_manifest = validate_default_manifest(
+        package,
+        fold_indices=selected_folds,
+    )
     set_seed(config.seed)
     log_dir = Path(resolve_log_dir(experiment_id))
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -93,6 +102,12 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
             "dataset_version": report.dataset_version,
             "result_count": len(report.fold_results),
             "summary": report.summary,
+            "baseline_reference": {
+                "manifest_path": str(
+                    default_manifest_path(report.dataset_version).resolve()
+                ),
+                "manifest": baseline_manifest.to_dict(),
+            },
         },
     )
     logger.info(
