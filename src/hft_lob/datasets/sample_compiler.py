@@ -129,9 +129,13 @@ class SampleCompiler:
         )
         frame = self.standardizer.transform_frame(transformed.frame)
         output_columns = [f"normalized__{name}" for name in self.feature_columns]
+        horizon_suffixes = tuple(f"{horizon}s" for horizon in self.config.target.horizons_seconds)
         row_valid = _row_valid(frame, output_columns)
-        target_valid = np.asarray(
-            frame.get_column("target_valid").fill_null(False), dtype=np.bool_
+        target_columns = tuple(f"Target_{suffix}_log" for suffix in horizon_suffixes)
+        target_valid_columns = tuple(f"target_valid_{suffix}" for suffix in horizon_suffixes)
+        targets = np.asarray(frame.select(target_columns).to_numpy(), dtype=np.float32)
+        horizon_valid = np.asarray(
+            frame.select(target_valid_columns).to_numpy(), dtype=np.bool_
         )
         end = offset + frame.height
         rows = (
@@ -141,8 +145,8 @@ class SampleCompiler:
         )
         return CompiledSession(
             features=np.asarray(frame.select(output_columns).to_numpy(), dtype=np.float32),
-            targets=np.asarray(frame.select(self.config.target_column).to_numpy(), dtype=np.float32),
-            validity=np.column_stack((row_valid, target_valid)),
+            targets=targets,
+            validity=np.column_stack((row_valid, horizon_valid)),
             market=np.asarray(
                 frame.select("mid_price", "future_mid", "BIDp1", "ASKp1").to_numpy(),
                 dtype=np.float32,

@@ -24,11 +24,17 @@ def _seed_worker(worker_id: int, base_seed: int) -> None:
     torch.manual_seed(worker_seed)
 
 
-def _collate(batch: list[tuple[torch.Tensor, torch.Tensor, SampleMeta]]) -> LOBBatch:
+def _collate(
+    batch: list[tuple[torch.Tensor, torch.Tensor, dict[int, torch.Tensor], SampleMeta]],
+) -> LOBBatch:
     if not batch:
         raise ValueError("cannot collate an empty batch")
-    features, targets, metadata = zip(*batch, strict=True)
-    return LOBBatch(torch.stack(features), torch.stack(targets), tuple(metadata))
+    features, targets, horizon_targets, metadata = zip(*batch, strict=True)
+    horizons = {
+        horizon: torch.stack(tuple(item[horizon] for item in horizon_targets))
+        for horizon in horizon_targets[0]
+    }
+    return LOBBatch(torch.stack(features), torch.stack(targets), tuple(metadata), horizons)
 
 
 class LOBDataModule(pl.LightningDataModule):

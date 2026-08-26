@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 
@@ -25,3 +25,4 @@ class LOBBatch:
     features: torch.Tensor
     targets: torch.Tensor
     metadata: tuple[SampleMeta, ...]
+    targets_by_horizon: dict[int, torch.Tensor] = field(default_factory=dict)

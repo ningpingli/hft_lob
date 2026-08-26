@@ -36,7 +36,7 @@ def _config(tmp_path: Path) -> DataBuildConfig:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),
+        target=TargetConfig(horizons_seconds=(6,), primary_horizon_seconds=6, tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(),
@@ -92,9 +92,10 @@ def test_build_dataset_package_is_complete_and_idempotent(
     index = pl.read_parquet(first / "folds" / "fold_001" / "train.parquet")
     assert index.height > 0
     dataset = PrebuiltLOBDataset(first, metadata, fold_index=1, split="train")
-    features, target, sample = dataset[0]
+    features, target, targets_by_horizon, sample = dataset[0]
     assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
     assert target.shape == (1,)
+    assert set(targets_by_horizon) == {6}
     assert sample.ticker == "TEST"
     module = LOBDataModule(
         open_dataset_package(first), fold_index=1, loader=LoaderConfig(), seed=42

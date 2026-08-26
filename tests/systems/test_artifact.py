@@ -8,6 +8,7 @@ import pytest
 
 from hft_lob.systems.artifact import (
     PredictionArtifact,
+    load_prediction_artifact,
     save_prediction_artifact,
 )
 from hft_lob.systems.contracts import SampleMeta
@@ -83,6 +84,30 @@ def test_save_prediction_artifact_writes_typed_complete_parquet(tmp_path: Path) 
     assert frame.schema["anchor_timestamp"] == pl.Datetime("us")
     assert frame.get_column("prediction").to_list() == pytest.approx([0.01, 0.02])
     assert frame.get_column("fold_index").unique().to_list() == [2]
+
+
+def test_prediction_artifact_round_trips_horizon_targets(tmp_path: Path) -> None:
+    artifact = PredictionArtifact(
+        predictions=np.asarray([0.01, 0.02]),
+        targets=np.asarray([0.015, 0.025]),
+        targets_by_horizon={
+            60: np.asarray([0.015, 0.025]),
+            120: np.asarray([0.02, 0.03]),
+        },
+        metadata=_metadata(),
+        model_name="cnn1",
+        model_version="model-v1",
+        dataset_version="dataset-v1",
+        fold_index=2,
+        split="test",
+    )
+    path = tmp_path / "fold-2" / "predictions.parquet"
+
+    save_prediction_artifact(artifact=artifact, path=str(path))
+    loaded = load_prediction_artifact(str(path))
+
+    assert set(loaded.targets_by_horizon) == {60, 120}
+    assert loaded.targets_by_horizon[120].tolist() == pytest.approx([0.02, 0.03])
 
 
 def test_prediction_artifact_rejects_mismatched_or_duplicate_samples() -> None:

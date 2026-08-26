@@ -28,7 +28,12 @@ def _segment() -> SessionSegment:
 
 def test_transform_matches_nearest_future_with_bounded_tolerance() -> None:
     transformer = LabelTransformer(
-        TargetConfig(type="log_mid_return", horizon_seconds=60, tolerance_seconds=3)
+        TargetConfig(
+            type="log_mid_return",
+            horizons_seconds=(60,),
+            primary_horizon_seconds=60,
+            tolerance_seconds=3,
+        )
     )
 
     result = transformer.transform(_segment()).frame
@@ -42,7 +47,12 @@ def test_transform_matches_nearest_future_with_bounded_tolerance() -> None:
 
 def test_transform_does_not_match_beyond_tolerance() -> None:
     transformer = LabelTransformer(
-        TargetConfig(type="simple_mid_return", horizon_seconds=60, tolerance_seconds=1)
+        TargetConfig(
+            type="simple_mid_return",
+            horizons_seconds=(60,),
+            primary_horizon_seconds=60,
+            tolerance_seconds=1,
+        )
     )
 
     result = transformer.transform(_segment()).frame
@@ -61,4 +71,10 @@ def test_transform_rejects_segment_metadata_mismatch() -> None:
 
 def test_target_config_rejects_tolerance_that_can_reach_anchor() -> None:
     with pytest.raises(ValueError, match="smaller than horizon"):
-        LabelTransformer(TargetConfig(horizon_seconds=60, tolerance_seconds=60))
+        LabelTransformer(
+            TargetConfig(
+                horizons_seconds=(60,),
+                primary_horizon_seconds=60,
+                tolerance_seconds=60,
+            )
+        )

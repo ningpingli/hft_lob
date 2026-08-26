@@ -31,6 +31,7 @@ class BaselineRunner:
             raise ValueError("split must not be empty")
         predictions: list[np.ndarray] = []
         targets: list[np.ndarray] = []
+        horizon_targets: dict[int, list[np.ndarray]] = {}
         metadata: list[SampleMeta] = []
         with torch.no_grad():
             for batch in batches:
@@ -42,6 +43,8 @@ class BaselineRunner:
                     )
                 predictions.append(output[:, 0].detach().cpu().numpy())
                 targets.append(batch.targets[:, 0].detach().cpu().numpy())
+                for horizon, values in batch.targets_by_horizon.items():
+                    horizon_targets.setdefault(horizon, []).append(values[:, 0].detach().cpu().numpy())
                 metadata.extend(batch.metadata)
         if not predictions:
             raise ValueError("prediction batches must not be empty")
@@ -54,6 +57,9 @@ class BaselineRunner:
             dataset_version=self.dataset_version,
             fold_index=self.fold_index,
             split=split,
+            targets_by_horizon={
+                horizon: np.concatenate(values) for horizon, values in horizon_targets.items()
+            },
         )
 
 

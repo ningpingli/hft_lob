@@ -41,6 +41,7 @@ def test_save_evaluation_outputs_writes_report_and_required_curves(tmp_path: Pat
         "evaluation_report",
         "daily_ic_curve",
         "time_series_grouped_return_curve",
+        "horizon_pearson_decay_curve",
     }
     for path in paths.values():
         assert Path(path).is_file()

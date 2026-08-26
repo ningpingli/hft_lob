@@ -68,9 +68,13 @@ class _ArrayAppender:
 class DatasetPackageWriter:
     """持有一次构建的文件句柄、临时目录和原子发布事务。"""
 
-    def __init__(self, output_root: str | Path, feature_count: int) -> None:
+    def __init__(
+        self, output_root: str | Path, feature_count: int, target_count: int = 1
+    ) -> None:
         if feature_count <= 0:
             raise ValueError("feature_count must be > 0")
+        if target_count <= 0:
+            raise ValueError("target_count must be > 0")
         self.output_root = Path(output_root).resolve()
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.build_root = self.output_root / f".building-{uuid.uuid4().hex}"
@@ -80,8 +84,12 @@ class DatasetPackageWriter:
             "features": _ArrayAppender(
                 self.work_root / ".features.bin", dtype=np.float32, width=feature_count
             ),
-            "targets": _ArrayAppender(self.work_root / ".targets.bin", dtype=np.float32, width=1),
-            "validity": _ArrayAppender(self.work_root / ".validity.bin", dtype=np.bool_, width=2),
+            "targets": _ArrayAppender(
+                self.work_root / ".targets.bin", dtype=np.float32, width=target_count
+            ),
+            "validity": _ArrayAppender(
+                self.work_root / ".validity.bin", dtype=np.bool_, width=target_count + 1
+            ),
             "market": _ArrayAppender(self.work_root / ".market.bin", dtype=np.float32, width=4),
         }
         self.row_writer: pq.ParquetWriter | None = None

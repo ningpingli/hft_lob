@@ -27,6 +27,7 @@ class LOBLightningModule(L.LightningModule):
       ``systems.metrics``）+ 日级稳定性（§14 序列相关处理）+ prediction
       artifact parquet（§28，``systems.artifact``）。
     """
+    _test_horizon_targets: list[tuple[int, torch.Tensor]]
 
     def __init__(
         self,
@@ -69,6 +70,7 @@ class LOBLightningModule(L.LightningModule):
         self._validation_targets: list[torch.Tensor] = []
         self._test_predictions: list[torch.Tensor] = []
         self._test_targets: list[torch.Tensor] = []
+        self._test_horizon_targets: list[tuple[int, torch.Tensor]] = []
         self._test_metadata: list[SampleMeta] = []
         self.test_artifact: PredictionArtifact | None = None
 
@@ -91,11 +93,14 @@ class LOBLightningModule(L.LightningModule):
         device: torch.device,
         dataloader_idx: int,
     ) -> LOBBatch:
-        """迁移 frozen LOBBatch 中的张量，metadata 保持在 CPU/Python 侧。"""
         return LOBBatch(
             features=batch.features.to(device, non_blocking=True),
             targets=batch.targets.to(device, non_blocking=True),
             metadata=batch.metadata,
+            targets_by_horizon={
+                horizon: values.to(device, non_blocking=True)
+                for horizon, values in batch.targets_by_horizon.items()
+            },
         )
 
     def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
@@ -159,27 +164,39 @@ class LOBLightningModule(L.LightningModule):
         loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
         self._test_predictions.append(predictions.detach().cpu())
         self._test_targets.append(targets.detach().cpu())
+        self._test_horizon_targets.extend(
+            (horizon, values.detach().cpu()) for horizon, values in batch.targets_by_horizon.items()
+        )
         self._test_metadata.extend(batch.metadata)
         self.log("test/loss", loss, batch_size=targets.shape[0], sync_dist=True)
         return loss
 
     def on_test_epoch_start(self) -> None:
         self._test_predictions.clear()
-        self._test_targets.clear()
+        cast(list[tuple[int, torch.Tensor]], self._test_horizon_targets).clear()
         self._test_metadata.clear()
         self.test_artifact = None
 
     def on_test_epoch_end(self) -> None:
         if not self._test_predictions:
             raise RuntimeError("test completed without any batches")
+        horizon_lists: dict[int, list[torch.Tensor]] = {}
+        for horizon, values in cast(
+            list[tuple[int, torch.Tensor]], self._test_horizon_targets
+        ):
+            horizon_lists.setdefault(horizon, []).append(values)
+        horizon_targets = {
+            horizon: torch.cat(values) for horizon, values in horizon_lists.items()
+        }
         self.test_artifact = self._make_artifact(
             predictions=torch.cat(self._test_predictions),
-            targets=torch.cat(self._test_targets),
+            targets=torch.cat(cast(list[torch.Tensor], self._test_targets)),
+            targets_by_horizon=horizon_targets,
             metadata=tuple(self._test_metadata),
             split="test",
         )
         self._test_predictions.clear()
-        self._test_targets.clear()
+        cast(list[tuple[int, torch.Tensor]], self._test_horizon_targets).clear()
         self._test_metadata.clear()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
@@ -211,6 +228,7 @@ class LOBLightningModule(L.LightningModule):
         *,
         predictions: torch.Tensor,
         targets: torch.Tensor,
+        targets_by_horizon: dict[int, torch.Tensor],
         metadata: tuple[SampleMeta, ...],
         split: str,
     ) -> PredictionArtifact:
@@ -227,4 +245,8 @@ class LOBLightningModule(L.LightningModule):
             dataset_version=self.dataset_version,
             fold_index=self.fold_index,
             split=split,
+            targets_by_horizon={
+                horizon: np.asarray(values[:, 0].detach().cpu(), dtype=np.float64)
+                for horizon, values in targets_by_horizon.items()
+            },
         )

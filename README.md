@@ -161,8 +161,19 @@ loggers/results/<experiment_id>/
             ├── predictions.parquet
             ├── evaluation.yaml
             ├── daily_ic_curve.png
+            ├── horizon_pearson_decay_curve.png
             └── time_series_grouped_return_curve.png
 ```
+
+独立测试使用训练实验目录，不重新训练或选择 checkpoint：
+
+```bash
+uv run hft_lob test \
+  --experiment-dir loggers/results/<experiment_id>
+```
+
+训练时会将 dataset 路径、dataset_id、fold 集合和 checkpoint 写入
+`experiment.yaml`；独立测试验证这些元数据后覆盖 `standalone_test/` 报告。
 
 共享 baseline 结果和权威引用保存在数据集实验空间：
 

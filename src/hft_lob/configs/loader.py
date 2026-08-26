@@ -161,8 +161,8 @@ def _validate_data_config(config: DataBuildConfig) -> None:
     positive = {
         "data.levels": config.data.levels,
         "data.snapshot_interval_seconds": config.data.snapshot_interval_seconds,
-        "cleaning.max_ffill_gap_seconds": config.cleaning.max_ffill_gap_seconds,
-        "target.horizon_seconds": config.target.horizon_seconds,
+        "target.primary_horizon_seconds": config.target.primary_horizon_seconds,
+        "target.horizons_seconds_count": len(config.target.horizons_seconds),
         "window.history_snapshots": config.window.history_snapshots,
     }
     invalid = [name for name, value in positive.items() if not isinstance(value, int) or value <= 0]

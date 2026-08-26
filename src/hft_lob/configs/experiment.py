@@ -55,12 +55,26 @@ class CleaningConfig:
 
 @dataclass(frozen=True)
 class TargetConfig:
-    """标签定义（§7）：60 秒中间价对数收益，future 匹配容差 3 秒（§7.2）。"""
+    """多 horizon 收益标签与主训练 horizon。"""
 
-    type: str = "log_mid_return"  # log_mid_return | simple_mid_return
-    horizon_seconds: int = 60
+    type: str = "log_mid_return"
+    horizons_seconds: tuple[int, ...] = (60, 120, 300, 600)
+    primary_horizon_seconds: int = 60
     tolerance_seconds: int = 3
 
+    def __post_init__(self) -> None:
+        horizons = tuple(self.horizons_seconds)
+        if not horizons or len(set(horizons)) != len(horizons):
+            raise ValueError("horizons_seconds must be non-empty and unique")
+        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in horizons):
+            raise ValueError("horizons_seconds must contain positive integers")
+        if self.primary_horizon_seconds not in horizons:
+            raise ValueError("primary_horizon_seconds must be included in horizons_seconds")
+        if self.tolerance_seconds < 0:
+            raise ValueError("tolerance_seconds must be >= 0")
+        if any(self.tolerance_seconds >= value for value in horizons):
+            raise ValueError("tolerance_seconds must be smaller than horizon values")
+        object.__setattr__(self, "horizons_seconds", horizons)
 
 @dataclass(frozen=True)
 class SessionConfig:
@@ -264,7 +278,7 @@ class DataBuildConfig:
     @property
     def target_column(self) -> str:
         short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
-        return f"Target_{self.target.horizon_seconds}s_{short}"
+        return f"Target_{self.target.primary_horizon_seconds}s_{short}"
 
 
 @dataclass(frozen=True)

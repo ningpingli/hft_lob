@@ -97,7 +97,7 @@ def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),
+        target=TargetConfig(horizons_seconds=(6,), primary_horizon_seconds=6, tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=8),
         features=FeatureConfig(),

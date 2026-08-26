@@ -15,6 +15,7 @@ from hft_lob.systems.metrics import (
     direction_accuracy,
     directional_precision_recall,
     evaluate,
+    horizon_pearson_decay,
     icir,
     mae,
     mean_daily_ic,
@@ -78,6 +79,18 @@ def test_mean_daily_ic_uses_finite_daily_ts_ics() -> None:
     assert [record.ic for record in records] == pytest.approx([1.0, -1.0])
     assert mean_daily_ic(np.array([record.ic for record in records])) == pytest.approx(0.0)
 
+def test_horizon_pearson_decay_uses_mean_daily_corr() -> None:
+    records = horizon_pearson_decay(
+        np.array([1.0, 2.0, 3.0, 4.0]),
+        {
+            60: np.array([1.0, 2.0, 2.0, 4.0]),
+            120: np.array([4.0, 3.0, 2.0, 1.0]),
+        },
+        np.array(["2025-01-01", "2025-01-01", "2025-01-02", "2025-01-02"]),
+    )
+
+    assert [record.horizon_seconds for record in records] == [60, 120]
+    assert [record.mean_daily_pearson_corr for record in records] == pytest.approx([1.0, -1.0])
 
 def test_evaluate_has_all_metric_names() -> None:
     assert set(evaluate(np.array([1.0, -1.0]), np.array([1.0, -1.0]))) == {

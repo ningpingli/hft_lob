@@ -25,10 +25,14 @@ def save_evaluation_outputs(report: EvaluationReport, output_dir: str | Path) ->
     grouped_return_path = plot_time_series_grouped_return_curve(
         report, destination / "time_series_grouped_return_curve.png"
     )
+    horizon_decay_path = plot_horizon_decay_curve(
+        report, destination / "horizon_pearson_decay_curve.png"
+    )
     return {
         "evaluation_report": str(report_path.resolve()),
         "daily_ic_curve": str(daily_ic_path.resolve()),
         "time_series_grouped_return_curve": str(grouped_return_path.resolve()),
+        "horizon_pearson_decay_curve": str(horizon_decay_path.resolve()),
     }
 
 
@@ -65,6 +69,39 @@ def plot_daily_ic_curve(report: EvaluationReport, output_path: str | Path) -> Pa
     axis.set_xticklabels(dates, rotation=45, ha="right")
     axis.grid(alpha=0.25)
     if np.any(finite) or np.isfinite(report.mean_daily_ic):
+        axis.legend(loc="best")
+    figure.tight_layout()
+    figure.savefig(path, dpi=150)
+    pyplot.close(figure)
+    return path
+
+
+def plot_horizon_decay_curve(report: EvaluationReport, output_path: str | Path) -> Path:
+    """Plot Mean Daily Pearson Corr versus future horizon."""
+    path = _prepare_output_path(output_path)
+    pyplot = _pyplot()
+    figure, axis = pyplot.subplots(figsize=(8, 5))
+    records = report.horizon_decay
+    horizons = np.asarray([record.horizon_seconds / 60 for record in records], dtype=np.float64)
+    values = np.asarray(
+        [record.mean_daily_pearson_corr for record in records], dtype=np.float64
+    )
+    finite = np.isfinite(values)
+    if np.any(finite):
+        axis.plot(
+            horizons[finite],
+            values[finite],
+            marker="o",
+            linewidth=1.8,
+            color="tab:green",
+            label="Mean Daily Pearson Corr",
+        )
+    axis.axhline(0.0, color="black", linewidth=0.8, alpha=0.6)
+    axis.set_title("Future Return Pearson Corr Decay")
+    axis.set_xlabel("Future horizon (minutes)")
+    axis.set_ylabel("Mean Daily Pearson Corr")
+    axis.grid(alpha=0.25)
+    if np.any(finite):
         axis.legend(loc="best")
     figure.tight_layout()
     figure.savefig(path, dpi=150)

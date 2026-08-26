@@ -50,6 +50,13 @@ def test_parse_baseline_cli_supports_replace_default() -> None:
     assert args.replace_default is True
 
 
+def test_parse_standalone_test_cli() -> None:
+    args = parse_args(["test", "--experiment-dir", "loggers/results/experiment"])
+
+    assert args.command == "test"
+    assert args.experiment_dir == "loggers/results/experiment"
+
+
 def test_parse_rejects_unknown_stage_or_missing_dataset() -> None:
     with pytest.raises(SystemExit):
         parse_args(["train", "--dataset-dir", "dataset", "--stages", "prepare-data"])

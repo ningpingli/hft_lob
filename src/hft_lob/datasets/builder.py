@@ -33,7 +33,11 @@ def build_dataset_package(config: DataBuildConfig, output_root: str | Path) -> P
         sources.version,
     )
     compiler = SampleCompiler(config)
-    with DatasetPackageWriter(output_root, len(compiler.feature_columns)) as writer:
+    with DatasetPackageWriter(
+        output_root,
+        len(compiler.feature_columns),
+        target_count=len(config.target.horizons_seconds),
+    ) as writer:
         for index, day in enumerate(compiler.compile(sources.files), start=1):
             writer.append(day)
             if index == 1 or index % 50 == 0 or index == len(sources.files):
@@ -88,4 +92,6 @@ def _metadata(
         source_hash=source_hash,
         processing_config_hash=sources.processing_hash,
         fold_plan_hash=fold_plan_hash,
+        target_horizons_seconds=config.target.horizons_seconds,
+        primary_horizon_seconds=config.target.primary_horizon_seconds,
     )
