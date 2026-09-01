@@ -14,7 +14,7 @@ from hft_lob.configs.experiment import DataBuildConfig
 from hft_lob.datasets.dataset_validator import stable_config_hash
 from hft_lob.preprocessing.clean import DataCleaner, SessionSegment
 from hft_lob.preprocessing.features import FeatureTransformer
-from hft_lob.preprocessing.labels import LabelTransformer, horizon_label_column
+from hft_lob.preprocessing.labels import LabelTransformer, label_columns
 from hft_lob.preprocessing.normalize import CausalRollingStandardizer
 from hft_lob.preprocessing.quality import QualityReport
 
@@ -129,13 +129,10 @@ class SampleCompiler:
         )
         frame = self.standardizer.transform_frame(transformed.frame)
         output_columns = [f"normalized__{name}" for name in self.feature_columns]
-        horizon_suffixes = tuple(f"{horizon}s" for horizon in self.config.target.horizons_seconds)
+        label_suffixes = tuple(f"{label}s" for label in self.config.target.label)
         row_valid = _row_valid(frame, output_columns)
-        target_columns = tuple(
-            horizon_label_column(self.config.target, horizon)
-            for horizon in self.config.target.horizons_seconds
-        )
-        target_valid_columns = tuple(f"target_valid_{suffix}" for suffix in horizon_suffixes)
+        target_columns = label_columns(self.config.target)
+        target_valid_columns = tuple(f"target_valid_{suffix}" for suffix in label_suffixes)
         targets = np.asarray(frame.select(target_columns).to_numpy(), dtype=np.float32)
         horizon_valid = np.asarray(
             frame.select(target_valid_columns).to_numpy(), dtype=np.bool_
@@ -160,7 +157,6 @@ class SampleCompiler:
                 row_valid,
                 offset,
                 self.config.window.history_snapshots,
-                self.config.target_column,
             ),
         )
 
@@ -182,14 +178,11 @@ def _anchor_frame(
     row_valid: np.ndarray,
     session_start: int,
     history_snapshots: int,
-    target_column: str,
 ) -> pl.DataFrame:
     target_valid = np.asarray(
         frame.select(
             (
                 pl.col("target_valid").fill_null(False)
-                & pl.col(target_column).is_not_null()
-                & pl.col(target_column).is_finite()
                 & pl.col("future_mid").is_not_null()
                 & pl.col("future_mid").is_finite()
             ).alias("valid")

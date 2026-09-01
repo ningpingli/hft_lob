@@ -55,26 +55,28 @@ class CleaningConfig:
 
 @dataclass(frozen=True)
 class TargetConfig:
-    """多 horizon 收益标签与主训练 horizon。"""
+    """多 horizon 收益标签配置。"""
 
     type: str = "log_mid_return"
-    horizons_seconds: tuple[int, ...] = (60, 120, 300, 600)
-    primary_horizon_seconds: int = 60
+    label: tuple[int, ...] = (60, 120, 300, 600)
     tolerance_seconds: int = 3
 
     def __post_init__(self) -> None:
-        horizons = tuple(self.horizons_seconds)
-        if not horizons or len(set(horizons)) != len(horizons):
-            raise ValueError("horizons_seconds must be non-empty and unique")
-        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in horizons):
-            raise ValueError("horizons_seconds must contain positive integers")
-        if self.primary_horizon_seconds not in horizons:
-            raise ValueError("primary_horizon_seconds must be included in horizons_seconds")
+        labels = tuple(self.label)
+        if not labels or len(set(labels)) != len(labels):
+            raise ValueError("label must be non-empty and unique")
+        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in labels):
+            raise ValueError("label must contain positive integers")
         if self.tolerance_seconds < 0:
             raise ValueError("tolerance_seconds must be >= 0")
-        if any(self.tolerance_seconds >= value for value in horizons):
-            raise ValueError("tolerance_seconds must be smaller than horizon values")
-        object.__setattr__(self, "horizons_seconds", horizons)
+        if any(self.tolerance_seconds >= value for value in labels):
+            raise ValueError("tolerance_seconds must be smaller than label values")
+        object.__setattr__(self, "label", labels)
+
+    @property
+    def target_count(self) -> int:
+        return len(self.label)
+
 
 @dataclass(frozen=True)
 class SessionConfig:
@@ -131,7 +133,7 @@ class LoaderConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """模型（§18）：统一 ``forward(x) -> [B, 1]``；MVP 仅 CNN1 / DeepLOB。"""
+    """模型（§18）：统一单 target 输出；多任务输出由数据包 labels 决定。"""
 
     name: str = "cnn1"
     output_dim: int = 1
@@ -276,9 +278,9 @@ class DataBuildConfig:
         return self.task.ticker
 
     @property
-    def target_column(self) -> str:
+    def target_columns(self) -> tuple[str, ...]:
         short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
-        return f"Target_{self.target.primary_horizon_seconds}s_{short}"
+        return tuple(f"Target_{label}s_{short}" for label in self.target.label)
 
 
 @dataclass(frozen=True)

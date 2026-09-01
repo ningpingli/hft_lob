@@ -47,13 +47,10 @@ class PrebuiltLOBDataset(Dataset):
             raise ValueError("sample window crosses a session boundary")
         features = torch.from_numpy(cast(np.ndarray, self._features)[start : anchor + 1].copy())
         target_row = cast(np.ndarray, self._targets)[anchor]
-        primary_index = self.metadata.target_horizons_seconds.index(
-            self.metadata.primary_horizon_seconds
-        )
-        target = torch.from_numpy(target_row[primary_index : primary_index + 1].copy())
+        target = torch.from_numpy(target_row[:1].copy())
         targets_by_horizon = {
-            horizon: torch.from_numpy(target_row[position : position + 1].copy())
-            for position, horizon in enumerate(self.metadata.target_horizons_seconds)
+            label: torch.from_numpy(target_row[position : position + 1].copy())
+            for position, label in enumerate(self.metadata.labels)
         }
         market = cast(np.ndarray, self._market)[anchor]
         timestamp = cast(datetime, row["anchor_timestamp"])

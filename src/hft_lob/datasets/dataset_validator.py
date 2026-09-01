@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-PACKAGE_SCHEMA_VERSION = 3
+PACKAGE_SCHEMA_VERSION = 4
 SUCCESS_MARKER = "_SUCCESS"
 FOLD_INDEX_COLUMNS = (
     "global_anchor_index",
@@ -94,7 +94,7 @@ class DatasetPackageMetadata:
     dataset_id: str
     ticker: str
     feature_columns: tuple[str, ...]
-    target_column: str
+    target_columns: tuple[str, ...]
     feature_dtype: str
     target_dtype: str
     snapshot_interval_seconds: int
@@ -104,15 +104,13 @@ class DatasetPackageMetadata:
     source_hash: str
     processing_config_hash: str
     fold_plan_hash: str
-    target_horizons_seconds: tuple[int, ...] = (60,)
-    primary_horizon_seconds: int = 60
+    labels: tuple[int, ...] = (60,)
     schema_version: int = PACKAGE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         text_fields = (
             "dataset_id",
             "ticker",
-            "target_column",
             "feature_dtype",
             "target_dtype",
             "normalization_mode",
@@ -127,12 +125,17 @@ class DatasetPackageMetadata:
             raise ValueError(f"unsupported dataset schema version: {self.schema_version}")
         if not self.feature_columns or len(set(self.feature_columns)) != len(self.feature_columns):
             raise ValueError("feature_columns must be non-empty and unique")
+        if not self.target_columns or len(set(self.target_columns)) != len(self.target_columns):
+            raise ValueError("target_columns must be non-empty and unique")
+        labels = tuple(self.labels)
+        if not labels or len(set(labels)) != len(labels):
+            raise ValueError("labels must be non-empty and unique")
+        if any(not isinstance(label, int) or isinstance(label, bool) or label <= 0 for label in labels):
+            raise ValueError("labels must contain positive integers")
+        if len(labels) != len(self.target_columns):
+            raise ValueError("labels and target_columns must have the same length")
         if self.snapshot_interval_seconds <= 0 or self.history_snapshots <= 0:
             raise ValueError("snapshot_interval_seconds and history_snapshots must be > 0")
-        if not self.target_horizons_seconds:
-            raise ValueError("target_horizons_seconds must not be empty")
-        if self.primary_horizon_seconds not in self.target_horizons_seconds:
-            raise ValueError("primary_horizon_seconds must be included in target horizons")
         if self.normalization_window < 2:
             raise ValueError("normalization_window must be >= 2")
         expected = compute_dataset_id(
@@ -143,11 +146,13 @@ class DatasetPackageMetadata:
         )
         if self.dataset_id != expected:
             raise ValueError("dataset_id does not match package identity fields")
+        object.__setattr__(self, "labels", labels)
 
     def to_dict(self) -> dict[str, object]:
         value = asdict(self)
         value["feature_columns"] = list(self.feature_columns)
-        value["target_horizons_seconds"] = list(self.target_horizons_seconds)
+        value["target_columns"] = list(self.target_columns)
+        value["labels"] = list(self.labels)
         return value
 
     @classmethod
@@ -160,15 +165,21 @@ class DatasetPackageMetadata:
                 f"invalid dataset metadata fields: missing={missing}, unknown={unknown}"
             )
         columns = value["feature_columns"]
-        horizons = value["target_horizons_seconds"]
+        targets = value["target_columns"]
+        labels = value["labels"]
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
-        if not isinstance(horizons, list) or not all(isinstance(item, int) for item in horizons):
-            raise ValueError("target_horizons_seconds must be a list of integers")
+        if not isinstance(targets, list) or not all(isinstance(item, str) for item in targets):
+            raise ValueError("target_columns must be a list of strings")
+        if not isinstance(labels, list) or not all(
+            isinstance(item, int) and not isinstance(item, bool) for item in labels
+        ):
+            raise ValueError("labels must be a list of integers")
         payload: dict[str, Any] = {
             **value,
             "feature_columns": tuple(columns),
-            "target_horizons_seconds": tuple(horizons),
+            "target_columns": tuple(targets),
+            "labels": tuple(labels),
         }
         return cls(**payload)
 
@@ -237,8 +248,8 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
     row_count = features.shape[0]
     expected_shapes = {
         "features.npy": (row_count, len(metadata.feature_columns)),
-        "targets.npy": (row_count, len(metadata.target_horizons_seconds)),
-        "validity.npy": (row_count, 1 + len(metadata.target_horizons_seconds)),
+        "targets.npy": (row_count, len(metadata.labels)),
+        "validity.npy": (row_count, 1 + len(metadata.labels)),
         "market.npy": (row_count, 4),
     }
     arrays = {

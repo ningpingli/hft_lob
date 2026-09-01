@@ -8,7 +8,7 @@ import pytest
 
 from hft_lob.configs.experiment import TargetConfig
 from hft_lob.preprocessing.clean import SessionSegment
-from hft_lob.preprocessing.labels import LabelTransformer, horizon_label_column, label_column
+from hft_lob.preprocessing.labels import LabelTransformer, horizon_label_column, label_columns
 
 
 def _segment() -> SessionSegment:
@@ -30,8 +30,7 @@ def test_transform_matches_nearest_future_with_bounded_tolerance() -> None:
     transformer = LabelTransformer(
         TargetConfig(
             type="log_mid_return",
-            horizons_seconds=(60,),
-            primary_horizon_seconds=60,
+            label=(60,),
             tolerance_seconds=3,
         )
     )
@@ -49,8 +48,7 @@ def test_transform_does_not_match_beyond_tolerance() -> None:
     transformer = LabelTransformer(
         TargetConfig(
             type="simple_mid_return",
-            horizons_seconds=(60,),
-            primary_horizon_seconds=60,
+            label=(60,),
             tolerance_seconds=1,
         )
     )
@@ -59,22 +57,21 @@ def test_transform_does_not_match_beyond_tolerance() -> None:
 
     assert result.get_column("future_mid").to_list() == [None, None, None]
     assert result.get_column("target_valid").to_list() == [False, False, False]
-    assert label_column(transformer.config) == "Target_60s_simple"
+    assert label_columns(transformer.config) == ("Target_60s_simple",)
 
 
-def test_label_columns_follow_configured_type_and_primary_horizon() -> None:
+def test_label_columns_follow_configured_type_and_label_order() -> None:
     config = TargetConfig(
         type="simple_mid_return",
-        horizons_seconds=(60, 120),
-        primary_horizon_seconds=120,
+        label=(120, 60),
     )
 
     assert horizon_label_column(config, 60) == "Target_60s_simple"
-    assert label_column(config) == "Target_120s_simple"
+    assert label_columns(config) == ("Target_120s_simple", "Target_60s_simple")
 
 
 def test_transform_rejects_unsorted_timestamps() -> None:
-    transformer = LabelTransformer(TargetConfig(horizons_seconds=(60,)))
+    transformer = LabelTransformer(TargetConfig(label=(60,)))
     segment = _segment()
 
     with pytest.raises(ValueError, match="timestamps must be sorted"):
@@ -89,13 +86,11 @@ def test_transform_rejects_segment_metadata_mismatch() -> None:
     with pytest.raises(ValueError, match="session_id"):
         transformer.transform(SessionSegment("2026-01-05", "PM", _segment().frame))
 
-
-def test_target_config_rejects_tolerance_that_can_reach_anchor() -> None:
-    with pytest.raises(ValueError, match="smaller than horizon"):
+def test_target_config_rejects_tolerance_that_can_reach_label() -> None:
+    with pytest.raises(ValueError, match="smaller than label"):
         LabelTransformer(
             TargetConfig(
-                horizons_seconds=(60,),
-                primary_horizon_seconds=60,
+                label=(60,),
                 tolerance_seconds=60,
             )
         )

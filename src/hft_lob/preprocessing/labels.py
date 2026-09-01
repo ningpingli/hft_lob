@@ -12,24 +12,25 @@ from hft_lob.preprocessing.clean import SessionSegment
 _LABEL_TYPE_SHORT: dict[str, str] = {"log_mid_return": "log", "simple_mid_return": "simple"}
 
 
-def label_column(config: TargetConfig) -> str:
-    """Return the primary training target column name."""
-    return horizon_label_column(config, config.primary_horizon_seconds)
+def label_columns(config: TargetConfig) -> tuple[str, ...]:
+    """Return all configured target column names in label order."""
+    return tuple(horizon_label_column(config, label) for label in config.label)
 
 
-def horizon_label_column(config: TargetConfig, horizon_seconds: int) -> str:
-    """Return the configured target column name for one horizon."""
+def horizon_label_column(config: TargetConfig, label: int) -> str:
+    """Return the configured target column name for one label."""
+
     try:
         short = _LABEL_TYPE_SHORT[config.type]
     except KeyError as exc:
         raise ValueError(f"unsupported target type: {config.type!r}") from exc
-    if horizon_seconds not in config.horizons_seconds:
-        raise ValueError(f"horizon_seconds is not configured: {horizon_seconds}")
-    return f"Target_{horizon_seconds}s_{short}"
+    if label not in config.label:
+        raise ValueError(f"label is not configured: {label}")
+    return f"Target_{label}s_{short}"
 
 
 class LabelTransformer:
-    """Append one target and validity set for every configured horizon."""
+    """Append one target and validity set for every configured label."""
 
     def __init__(self, config: TargetConfig) -> None:
         if config.type not in _LABEL_TYPE_SHORT:
@@ -37,7 +38,7 @@ class LabelTransformer:
         self.config = config
 
     def transform(self, segment: SessionSegment) -> SessionSegment:
-        """Add future prices, returns, and per-horizon validity columns."""
+        """Add future prices, returns, and per-label validity columns."""
         frame = segment.frame
         required = {"trade_date", "session_id", "timestamp", "mid_price", "book_valid"}
         missing = sorted(required.difference(frame.columns))
@@ -63,8 +64,8 @@ class LabelTransformer:
             & (pl.col("mid_price") > 0)
         )
         result = frame
-        for horizon in self.config.horizons_seconds:
-            suffix = f"{horizon}s"
+        for label in self.config.label:
+            suffix = f"{label}s"
             future_timestamp = f"future_timestamp_{suffix}"
             future_mid = f"future_mid_{suffix}"
             future_book_valid = f"future_book_valid_{suffix}"
@@ -81,7 +82,7 @@ class LabelTransformer:
             ).sort(future_timestamp)
             result = result.with_columns(
                 (
-                    pl.col("timestamp") + pl.lit(timedelta(seconds=horizon))
+                    pl.col("timestamp") + pl.lit(timedelta(seconds=label))
                 ).alias(target_timestamp)
             ).join_asof(
                 candidates,
@@ -114,11 +115,15 @@ class LabelTransformer:
                 .alias(simple_name),
             ).drop(target_timestamp, future_book_valid)
 
-        primary_suffix = f"{self.config.primary_horizon_seconds}s"
+        suffixes = tuple(f"{label}s" for label in self.config.label)
         result = result.with_columns(
-            pl.col(f"future_timestamp_{primary_suffix}").alias("future_timestamp"),
-            pl.col(f"future_mid_{primary_suffix}").alias("future_mid"),
-            pl.col(f"target_valid_{primary_suffix}").alias("target_valid"),
+            pl.coalesce([pl.col(f"future_timestamp_{suffix}") for suffix in suffixes]).alias(
+                "future_timestamp"
+            ),
+            pl.coalesce([pl.col(f"future_mid_{suffix}") for suffix in suffixes]).alias("future_mid"),
+            pl.any_horizontal(
+                [pl.col(f"target_valid_{suffix}") for suffix in suffixes]
+            ).alias("target_valid"),
         )
         return SessionSegment(
             trade_date=segment.trade_date,
@@ -145,8 +150,8 @@ class LabelTransformer:
 
 def _output_columns(config: TargetConfig) -> list[str]:
     columns: list[str] = []
-    for horizon in config.horizons_seconds:
-        suffix = f"{horizon}s"
+    for label in config.label:
+        suffix = f"{label}s"
         columns.extend(
             [
                 f"future_timestamp_{suffix}",
@@ -164,8 +169,8 @@ def _output_columns(config: TargetConfig) -> list[str]:
 
 def _empty_output_frame(frame: pl.DataFrame, config: TargetConfig) -> pl.DataFrame:
     expressions: list[pl.Expr] = []
-    for horizon in config.horizons_seconds:
-        suffix = f"{horizon}s"
+    for label in config.label:
+        suffix = f"{label}s"
         expressions.extend(
             [
                 pl.lit(None).cast(pl.Datetime("us")).alias(f"future_timestamp_{suffix}"),

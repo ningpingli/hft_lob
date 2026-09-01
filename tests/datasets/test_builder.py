@@ -36,7 +36,7 @@ def _config(tmp_path: Path) -> DataBuildConfig:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(horizons_seconds=(6,), primary_horizon_seconds=6, tolerance_seconds=0),
+        target=TargetConfig(label=(6,), tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(),
