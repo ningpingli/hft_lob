@@ -18,13 +18,12 @@ from hft_lob.systems.lob_module import LOBLightningModule
 
 
 class MeanModel(nn.Module):
-    def __init__(self, features: int) -> None:
+    def __init__(self, features: int, outputs: int = 1) -> None:
         super().__init__()
-        self.output = nn.Linear(features, 1)
+        self.output = nn.Linear(features, outputs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.output(x.mean(dim=1))
-
 
 def _config() -> ModelRunConfig:
     return ModelRunConfig(
@@ -47,7 +46,8 @@ def _batch() -> LOBBatch:
             [[-1.0, 2.0], [0.0, 1.0], [1.0, 0.0]],
         ]
     )
-    targets = torch.tensor([[0.2], [-0.1]])
+    targets = torch.tensor([[0.2, 0.3], [-0.1, float("nan")]])
+    target_valid = torch.tensor([[True, True], [True, False]])
     metadata = tuple(
         SampleMeta(
             ticker="TEST",
@@ -62,13 +62,15 @@ def _batch() -> LOBBatch:
         )
         for index in range(2)
     )
-    return LOBBatch(features, targets, metadata)
+    return LOBBatch(features, targets, target_valid, metadata)
 
 
 def _module() -> LOBLightningModule:
     module = LOBLightningModule(
-        MeanModel(2),
+        MeanModel(2, outputs=2),
         _config(),
+        target_count=2,
+        labels=(60, 120),
         dataset_version="dataset-v1",
         model_version="model-v1",
         fold_index=1,
@@ -108,13 +110,12 @@ def test_test_uses_complete_artifact_contract() -> None:
     module.on_test_epoch_end()
 
     assert module.test_artifact is not None
-    assert module.test_artifact.predictions.shape == (2,)
+    assert module.test_artifact.predictions.shape == (2, 2)
     assert module.test_artifact.dataset_version == "dataset-v1"
     assert module.test_artifact.fold_index == 1
 
 
 def test_rejects_noncanonical_model_output() -> None:
-    module = LOBLightningModule(nn.Identity(), _config())
-
+    module = LOBLightningModule(nn.Identity(), _config(), target_count=2, labels=(60, 120))
     with pytest.raises(ValueError, match="model output"):
         module(torch.randn(2, 3, 2))

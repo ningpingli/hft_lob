@@ -25,19 +25,24 @@ def _seed_worker(worker_id: int, base_seed: int) -> None:
 
 
 def _collate(
-    batch: list[tuple[torch.Tensor, torch.Tensor, dict[int, torch.Tensor], SampleMeta]],
+    batch: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, SampleMeta]],
 ) -> LOBBatch:
     if not batch:
         raise ValueError("cannot collate an empty batch")
-    features, targets, horizon_targets, metadata = zip(*batch, strict=True)
-    expected_horizons = set(horizon_targets[0])
-    if any(set(item) != expected_horizons for item in horizon_targets[1:]):
-        raise ValueError("all samples in a batch must contain the same target horizons")
-    horizons = {
-        horizon: torch.stack(tuple(item[horizon] for item in horizon_targets))
-        for horizon in expected_horizons
-    }
-    return LOBBatch(torch.stack(features), torch.stack(targets), tuple(metadata), horizons)
+    features, targets, target_valid, metadata = zip(*batch, strict=True)
+    target_width = targets[0].shape
+    if target_width != target_valid[0].shape or len(target_width) != 1:
+        raise ValueError("targets and target_valid must have shape [L]")
+    if any(target.shape != target_width for target in targets):
+        raise ValueError("all samples in a batch must have the same target width")
+    if any(valid.shape != target_width for valid in target_valid):
+        raise ValueError("all target_valid vectors must match target width")
+    return LOBBatch(
+        torch.stack(features),
+        torch.stack(targets),
+        torch.stack(target_valid),
+        tuple(metadata),
+    )
 
 
 class LOBDataModule(pl.LightningDataModule):

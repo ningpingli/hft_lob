@@ -84,8 +84,10 @@ def test_manifest_rejects_missing_requested_fold(
 
 def _artifact(metadata: DatasetPackageMetadata) -> PredictionArtifact:
     return PredictionArtifact(
-        predictions=np.array([0.1]),
-        targets=np.array([0.2]),
+        predictions=np.array([[0.1]]),
+        targets=np.array([[0.2]]),
+        target_valid=np.array([[True]]),
+        labels=(60,),
         metadata=(
             SampleMeta(
                 ticker=metadata.ticker,

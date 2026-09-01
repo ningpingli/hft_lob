@@ -34,9 +34,9 @@ class RandomizedPrebuiltDataset(PrebuiltLOBDataset):
     """测试专用包装：让每个 worker 同时消费三套随机流。"""
 
     def __getitem__(self, index: int):  # type: ignore[no-untyped-def]
-        features, target, targets_by_horizon, metadata = super().__getitem__(index)
+        features, target, target_valid, metadata = super().__getitem__(index)
         noise = random.random() + float(np.random.random()) + float(torch.rand(()))
-        return features + noise, target, targets_by_horizon, metadata
+        return features + noise, target, target_valid, metadata
 
 
 def _raw_row(timestamp: datetime, *, step: int, day: int) -> dict[str, object]:

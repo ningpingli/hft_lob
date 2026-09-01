@@ -36,6 +36,7 @@ def build_model(
     *,
     feature_columns: Sequence[str],
     history_snapshots: int,
+    target_count: int | None = None,
     homological_structures: dict[str, Any] | None = None,
 ) -> nn.Module:
     """按配置实例化模型（§18：统一 forward([B,T,F]) -> [B,1]）。
@@ -56,34 +57,39 @@ def build_model(
     name = config.model.name
     num_features = len(feature_columns)
     history = history_snapshots
+    output_dim = config.model.output_dim if target_count is None else target_count
     levels = sum(name.startswith("ASKp") for name in feature_columns) or num_features // 4
-    if history <= 0 or levels <= 0:
-        raise ValueError("dataset metadata must contain positive history and LOB levels")
+    if history <= 0 or levels <= 0 or output_dim <= 0:
+        raise ValueError("dataset metadata and target_count must be positive")
 
     if name == "cnn1":
-        return CNN1(num_features=num_features, history_length=history)
+        return CNN1(num_features=num_features, history_length=history, output_dim=output_dim)
     if name == "deeplob":
-        return DeepLOB(num_features=num_features, levels=levels)
-    # ---- 以下接口保留、暂不实现（§39 Phase 3-4）----
+        return DeepLOB(num_features=num_features, levels=levels, output_dim=output_dim)
     if name == "transformer":
-        return Transformer(num_features=num_features, history_length=history)
+        return Transformer(
+            num_features=num_features, history_length=history, output_dim=output_dim
+        )
     if name == "itransformer":
-        return ITransformer(num_features=num_features, history_length=history)
+        return ITransformer(
+            num_features=num_features, history_length=history, output_dim=output_dim
+        )
     if name == "lobtransformer":
-        return LobTransformer(num_features=num_features, levels=levels)
+        return LobTransformer(
+            num_features=num_features, levels=levels, output_dim=output_dim
+        )
     if name == "cnn2":
-        return CNN2(num_features=num_features, history_length=history)
+        return CNN2(num_features=num_features, history_length=history, output_dim=output_dim)
     if name == "axiallob":
-        return AxialLOB(W=num_features, H=history)
+        return AxialLOB(W=num_features, H=history, output_dim=output_dim)
     if name == "dla":
-        return DLA(num_features=num_features, num_snapshots=history)
+        return DLA(num_features=num_features, num_snapshots=history, output_dim=output_dim)
     if name == "binbtabl":
-        # d2/d3/t3 沿用 lobx 5 档默认（待模型实现阶段配置化）。
-        return BiN_BTABL(d2=120, d1=num_features, t1=history, t2=levels, d3=1, t3=1)
+        return BiN_BTABL(d2=120, d1=num_features, t1=history, t2=levels, d3=output_dim, t3=1)
     if name == "binctabl":
         return BiN_CTABL(
             d2=120, d1=num_features, t1=history, t2=levels,
-            d3=120, t3=5, d4=1, t4=1,
+            d3=120, t3=5, d4=output_dim, t4=1,
         )
     if name == "hlob":
         if homological_structures is None:
@@ -91,7 +97,11 @@ def build_model(
                 "build_model('hlob', ...) requires homological_structures "
                 "(prepared by the caller; see doc/需求文档.md §1.2 — HLOB 不在 MVP)"
             )
-        return Complete_HCNN(homological_structures=homological_structures, num_features=num_features)
+        return Complete_HCNN(
+            homological_structures=homological_structures,
+            num_features=num_features,
+            output_dim=output_dim,
+        )
     raise ValueError(
         f"Unsupported model {name!r}; registered: cnn1 | deeplob | transformer | "
         "itransformer | lobtransformer | cnn2 | axiallob | dla | binbtabl | "

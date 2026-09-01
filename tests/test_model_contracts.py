@@ -66,9 +66,10 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
         _make_config(name),
         feature_columns=[f"f{i}" for i in range(_FEATURES)],
         history_snapshots=_HISTORY,
+        target_count=3,
     )
     out = model(sample)
-    assert out.shape == (2, 1)
+    assert out.shape == (2, 3)
 
 
 @pytest.mark.parametrize("model_type", (CNN1, CNN2))

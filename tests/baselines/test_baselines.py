@@ -79,6 +79,7 @@ def test_volume_indices_follow_level_order() -> None:
 def test_runner_builds_prediction_artifact() -> None:
     features = torch.randn(2, 3, 2)
     targets = torch.tensor([[0.1], [-0.2]])
+    target_valid = torch.ones_like(targets, dtype=torch.bool)
     metadata = tuple(
         SampleMeta(
             ticker="TEST",
@@ -93,15 +94,15 @@ def test_runner_builds_prediction_artifact() -> None:
         )
         for index in range(2)
     )
-    batches = (LOBBatch(features, targets, metadata),)
+    batches = (LOBBatch(features, targets, target_valid, metadata),)
     runner = BaselineRunner("zero", ZeroBaseline(), "v1", "dataset-v1", 1)
 
     runner.fit(lambda: iter(batches))
     artifact = runner.predict(batches, split="test")
 
     assert artifact.model_name == "zero"
-    assert artifact.predictions.tolist() == [0.0, 0.0]
-    assert artifact.targets.tolist() == targets[:, 0].tolist()
+    assert artifact.predictions.tolist() == [[0.0], [0.0]]
+    assert artifact.targets.tolist() == targets.tolist()
 
 
 def test_all_baselines_reject_empty_training_batches() -> None:

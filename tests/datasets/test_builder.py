@@ -92,10 +92,11 @@ def test_build_dataset_package_is_complete_and_idempotent(
     index = pl.read_parquet(first / "folds" / "fold_001" / "train.parquet")
     assert index.height > 0
     dataset = PrebuiltLOBDataset(first, metadata, fold_index=1, split="train")
-    features, target, targets_by_horizon, sample = dataset[0]
+    features, target, target_valid, sample = dataset[0]
     assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
     assert target.shape == (1,)
-    assert set(targets_by_horizon) == {6}
+    assert target_valid.shape == (1,)
+    assert target_valid.all()
     assert sample.ticker == "TEST"
     module = LOBDataModule(
         open_dataset_package(first), fold_index=1, loader=LoaderConfig(), seed=42

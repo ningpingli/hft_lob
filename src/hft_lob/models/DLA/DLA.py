@@ -14,6 +14,7 @@ class DLA(nn.Module):
         num_features: int | None = None,
         num_snapshots: int = 100,
         hidden_size: int = 128,
+        output_dim: int = 1,
     ) -> None:
         """初始化 DLA。
 
@@ -40,7 +41,7 @@ class DLA(nn.Module):
         )
 
         self.W2 = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.W3 = nn.Linear(num_snapshots * hidden_size, 1)
+        self.W3 = nn.Linear(num_snapshots * hidden_size, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
@@ -54,9 +55,9 @@ class DLA(nn.Module):
         Raises:
             ValueError: 输入维度与构造契约不一致。
         """
-        # 先去掉单通道维，再执行输入维度契约（GRU 输入维与展平后的 W3 宽度
-        # 依赖快照数 / 特征数）。
-        x = x.squeeze(1)
+        if x.ndim != 3:
+            raise ValueError(f"DLA expects [B, T, F], got shape {tuple(x.shape)}")
+        # GRU 输入维度与展平后的 W3 宽度依赖快照数 / 特征数。
         if x.shape[-1] != self.num_features:
             raise ValueError(
                 f"DLA expects {self.num_features} features per snapshot, got "

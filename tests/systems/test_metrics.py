@@ -140,8 +140,10 @@ def test_build_evaluation_report() -> None:
         for index in range(8)
     )
     artifact = PredictionArtifact(
-        predictions=predictions,
-        targets=predictions.copy(),
+        predictions=predictions[:, None],
+        targets=predictions[:, None].copy(),
+        target_valid=np.ones((predictions.size, 1), dtype=bool),
+        labels=(60,),
         metadata=metadata,
         model_name="model",
         model_version="v1",

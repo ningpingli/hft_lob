@@ -183,8 +183,8 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("seed must be an integer in [0, 2**32)")
     if config.model.name.strip() == "":
         raise ValueError("model.name must not be empty")
-    if config.model.output_dim != 1:
-        raise ValueError("model.output_dim must be 1 for scalar model contract")
+    if config.model.output_dim <= 0:
+        raise ValueError("model.output_dim must be > 0")
     if config.training.monitor_mode not in {"min", "max"}:
         raise ValueError("training.monitor_mode must be 'min' or 'max'")
     if len(config.training.betas) != 2 or any(

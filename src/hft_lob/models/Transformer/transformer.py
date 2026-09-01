@@ -87,6 +87,7 @@ class Transformer(nn.Module):
         activation: str = "relu",
         norm_first: bool = False,
         history_length: int = 100,
+        output_dim: int = 1,
     ) -> None:
         """初始化 Transformer。
 
@@ -129,28 +130,29 @@ class Transformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers, norm=encoder_norm
         )
-        self.regression_head = nn.Linear(d_model, 1)
+        self.regression_head = nn.Linear(d_model, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
 
         Args:
-            x: 输入张量 ``(N, 1, history_length, num_features)``。
+            x: 统一时序输入 ``[B, T, F]``。
 
         Returns:
-            模型输出 ``(N, 1)``。
+            无界回归预测，形状为 ``[B, output_dim]``。
 
         Raises:
-            ValueError: 特征维度与构造契约不一致。
+            ValueError: 输入维度或特征维度与构造契约不一致。
         """
-        # 输入维度契约（5 档数据 = 20 特征，10 档 = 40）。
+        if x.ndim != 3:
+            raise ValueError(f"Transformer expects [B, T, F], got shape {tuple(x.shape)}")
         if x.shape[-1] != self.num_features:
             raise ValueError(
                 f"Transformer expects {self.num_features} features per snapshot, "
                 f"got {x.shape[-1]}. 请核对 ExperimentConfig 的 features 特征列 "
                 f"与 data.levels 契约。"
             )
-        x = self.embed(x.squeeze(1))
+        x = self.embed(x)
 
         embed_pos = self.embed_positions(x.shape)
 

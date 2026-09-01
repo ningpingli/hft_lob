@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import nn
 
-from hft_lob.systems.losses import build_loss
+from hft_lob.systems.losses import build_loss, masked_loss
 
 
 @pytest.mark.parametrize(
@@ -39,3 +39,13 @@ def test_build_loss_rejects_unknown_name(name: str) -> None:
 def test_build_loss_rejects_non_positive_huber_delta(delta: float) -> None:
     with pytest.raises(ValueError, match="huber_delta must be > 0"):
         build_loss("huber", huber_delta=delta)
+
+
+def test_masked_loss_ignores_invalid_target_elements() -> None:
+    predictions = torch.tensor([[1.0, 10.0], [3.0, 20.0]])
+    targets = torch.tensor([[0.0, float("nan")], [2.0, float("nan")]])
+    valid = torch.tensor([[True, False], [True, False]])
+
+    loss = masked_loss(nn.MSELoss(), predictions, targets, valid)
+
+    assert loss.item() == pytest.approx(1.0)

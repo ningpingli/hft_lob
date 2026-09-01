@@ -321,10 +321,8 @@ def build_evaluation_report(
     if len(set(config.metrics)) != len(config.metrics):
         raise ValueError("evaluation metrics must be unique")
 
-    predictions = artifact.predictions
-    targets = artifact.targets
-    trade_dates = np.asarray([meta.trade_date for meta in artifact.metadata])
-    session_ids = np.asarray([meta.session_id for meta in artifact.metadata])
+    predictions, targets, trade_dates, session_ids = _flatten_artifact(artifact)
+    sample_count = len(artifact.metadata)
     overall_all = evaluate(predictions, targets)
     overall = {name: overall_all[name] for name in config.metrics}
 
@@ -380,7 +378,7 @@ def build_evaluation_report(
     }
     bins = prediction_quantile_bins(predictions, targets, n_bins=config.prediction_bins)
     return EvaluationReport(
-        sample_count=int(predictions.size),
+        sample_count=sample_count,
         overall=overall,
         daily=daily,
         daily_ic=daily_ic,
@@ -388,6 +386,26 @@ def build_evaluation_report(
         daily_summary=daily_summary,
         confidence_intervals=confidence_intervals,
         prediction_bins=bins,
+    )
+
+
+def _flatten_artifact(
+    artifact: PredictionArtifact,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    predictions = np.asarray(artifact.predictions, dtype=np.float64)
+    targets = np.asarray(artifact.targets, dtype=np.float64)
+    valid = np.asarray(artifact.target_valid, dtype=bool)
+    if predictions.shape != targets.shape or predictions.shape != valid.shape:
+        raise ValueError("artifact prediction, target, and validity shapes must match")
+    labels_count = predictions.shape[1]
+    row_dates = np.asarray([meta.trade_date for meta in artifact.metadata])
+    row_sessions = np.asarray([meta.session_id for meta in artifact.metadata])
+    flattened_valid = valid.reshape(-1)
+    return (
+        predictions.reshape(-1)[flattened_valid],
+        targets.reshape(-1)[flattened_valid],
+        np.repeat(row_dates, labels_count)[flattened_valid],
+        np.repeat(row_sessions, labels_count)[flattened_valid],
     )
 
 

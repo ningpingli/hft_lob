@@ -14,6 +14,7 @@ class CNN2(nn.Module):
         num_features: int = 20,
         history_length: int = 100,
         temp: int | None = None,
+        output_dim: int = 1,
     ) -> None:
         """初始化 CNN2。
 
@@ -68,7 +69,7 @@ class CNN2(nn.Module):
         self.prelu6 = nn.PReLU()
 
         # 全连接 2（回归读出头）
-        self.regression_head = nn.Linear(32, 1)
+        self.regression_head = nn.Linear(32, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

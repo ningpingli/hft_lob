@@ -22,7 +22,15 @@ def _enforce_max_norm(w: torch.Tensor) -> None:
 class BiN_BTABL(nn.Module):
     """BiN_BTABL：BiN + BL 层 + TABL 层的 B(TABL) 架构。"""
 
-    def __init__(self, d2: int, d1: int, t1: int, t2: int, d3: int, t3: int) -> None:
+    def __init__(
+        self,
+        d2: int,
+        d1: int,
+        t1: int,
+        t2: int,
+        d3: int,
+        t3: int,
+    ) -> None:
         """初始化 BiN_BTABL。
 
         Args:
@@ -72,7 +80,8 @@ class BiN_CTABL(nn.Module):
     """BiN_CTABL：BiN + 两个 BL 层 + TABL 层的 C(TABL) 架构。"""
 
     def __init__(
-        self, d2: int, d1: int, t1: int, t2: int, d3: int, t3: int, d4: int, t4: int
+        self, d2: int, d1: int, t1: int, t2: int, d3: int, t3: int, d4: int,
+        t4: int,
     ) -> None:
         """初始化 BiN_CTABL。
 

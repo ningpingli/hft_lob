@@ -162,6 +162,7 @@ class AxialLOB(nn.Module):
         n_heads: int = 4,
         pool_kernel: tuple[int, int] = (1, 4),
         pool_stride: tuple[int, int] = (1, 4),
+        output_dim: int = 1,
     ) -> None:
         """初始化 AxialLOB。
 
@@ -203,7 +204,7 @@ class AxialLOB(nn.Module):
         self.activation = nn.ReLU()
         # 展平宽度 = 池化后的 W（pool_stride[1] 作用于特征轴）；W=40 -> 4000，
         # W=20 -> 2000。
-        self.linear = nn.Linear(c_final * H * (W // pool_stride[1]), 1)
+        self.linear = nn.Linear(c_final * H * (W // pool_stride[1]), output_dim)
         self.pooling = nn.AvgPool2d(kernel_size=pool_kernel, stride=pool_stride)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

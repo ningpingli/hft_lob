@@ -15,6 +15,7 @@ class DeepLOB(nn.Module):
         self,
         num_features: int | None = None,
         levels: int | None = None,
+        output_dim: int = 1,
     ) -> None:
         """初始化 DeepLOB。
 
@@ -109,7 +110,7 @@ class DeepLOB(nn.Module):
         self.lstm = nn.LSTM(
             input_size=192, hidden_size=64, num_layers=1, batch_first=True
         )
-        self.regression_head = nn.Linear(64, 1)
+        self.regression_head = nn.Linear(64, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+import torch
 from torch import nn
 
 #: 支持的损失名（huber 为 MVP primary，§20）。
@@ -33,3 +36,20 @@ def build_loss(name: str = "huber", *, huber_delta: float = 1.0) -> nn.Module:
         return nn.HuberLoss(delta=huber_delta)
 
     raise ValueError(f"unsupported loss name: {name!r}; expected one of {LOSS_NAMES}")
+
+
+def masked_loss(
+    loss_fn: nn.Module,
+    predictions: torch.Tensor,
+    targets: torch.Tensor,
+    target_valid: torch.Tensor,
+) -> torch.Tensor:
+    """在每个样本的有效 target 元素上计算损失。"""
+    if predictions.shape != targets.shape or predictions.shape != target_valid.shape:
+        raise ValueError("predictions, targets and target_valid must have the same shape")
+    if target_valid.dtype is not torch.bool:
+        raise TypeError("target_valid must have dtype torch.bool")
+    valid = target_valid
+    if not valid.any():
+        return predictions.sum() * 0.0
+    return cast(torch.Tensor, loss_fn(predictions[valid], targets[valid]))

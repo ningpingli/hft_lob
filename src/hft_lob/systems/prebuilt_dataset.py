@@ -27,13 +27,14 @@ class PrebuiltLOBDataset(Dataset):
         self._features: np.ndarray | None = None
         self._targets: np.ndarray | None = None
         self._market: np.ndarray | None = None
+        self._validity: np.ndarray | None = None
 
     def __len__(self) -> int:
         return self.index.height
 
     def __getitem__(
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, dict[int, torch.Tensor], SampleMeta]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, SampleMeta]:
         if index < 0:
             index += len(self)
         if index < 0 or index >= len(self):
@@ -46,12 +47,10 @@ class PrebuiltLOBDataset(Dataset):
         if start < session_start:
             raise ValueError("sample window crosses a session boundary")
         features = torch.from_numpy(cast(np.ndarray, self._features)[start : anchor + 1].copy())
-        target_row = cast(np.ndarray, self._targets)[anchor]
-        target = torch.from_numpy(target_row[:1].copy())
-        targets_by_horizon = {
-            label: torch.from_numpy(target_row[position : position + 1].copy())
-            for position, label in enumerate(self.metadata.labels)
-        }
+        target = torch.from_numpy(cast(np.ndarray, self._targets)[anchor].copy())
+        target_valid = torch.from_numpy(
+            cast(np.ndarray, self._validity)[anchor, 1:].copy()
+        )
         market = cast(np.ndarray, self._market)[anchor]
         timestamp = cast(datetime, row["anchor_timestamp"])
         sample = SampleMeta(
@@ -65,15 +64,16 @@ class PrebuiltLOBDataset(Dataset):
             ask1=float(market[3]),
             spread=float(market[3] - market[2]),
         )
-        return features, target, targets_by_horizon, sample
+        return features, target, target_valid, sample
 
     def __getstate__(self) -> dict[str, object]:
         state = dict(self.__dict__)
-        state.update(_features=None, _targets=None, _market=None)
+        state.update(_features=None, _targets=None, _validity=None, _market=None)
         return state
 
     def _ensure_arrays(self) -> None:
         if self._features is None:
             self._features = np.load(self.package_dir / "features.npy", mmap_mode="r")
             self._targets = np.load(self.package_dir / "targets.npy", mmap_mode="r")
+            self._validity = np.load(self.package_dir / "validity.npy", mmap_mode="r")
             self._market = np.load(self.package_dir / "market.npy", mmap_mode="r")

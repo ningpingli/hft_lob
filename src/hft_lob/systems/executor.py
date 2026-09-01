@@ -79,8 +79,11 @@ class DefaultWalkForwardExecutor:
                 config,
                 feature_columns=metadata.feature_columns,
                 history_snapshots=metadata.history_snapshots,
+                target_count=len(metadata.labels),
             ),
             config,
+            target_count=len(metadata.labels),
+            labels=metadata.labels,
             dataset_version=metadata.dataset_id,
             model_version=model_version,
             fold_index=fold_index,
@@ -157,6 +160,7 @@ class DefaultWalkForwardExecutor:
             model_version=model_version,
             dataset_version=metadata.dataset_id,
             fold_index=fold_index,
+            labels=metadata.labels,
         )
         runner.fit(lambda: (cast(LOBBatch, batch) for batch in datamodule.train_dataloader()))
         datamodule.teardown("fit")
