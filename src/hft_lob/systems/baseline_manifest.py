@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+import numpy as np
 import yaml
 
 from hft_lob.datasets.dataset_validator import DatasetPackage
@@ -19,13 +21,14 @@ _RESULTS_ROOT = Path("loggers") / "results"
 @dataclass(frozen=True)
 class BaselineArtifactReference:
     """One baseline/fold artifact registered in the default manifest."""
-
     fold_index: int
     baseline_name: str
     predictions_path: str
     evaluation_path: str
     overall: dict[str, float]
     mean_daily_ic: float
+    daily_metrics: tuple[dict[str, object], ...] = ()
+    horizon_decay: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,14 @@ class BaselineManifest:
                 evaluation_path=str(item["evaluation_path"]),
                 overall={str(key): float(metric) for key, metric in item["overall"].items()},
                 mean_daily_ic=float(item["mean_daily_ic"]),
+                daily_metrics=tuple(
+                    {str(key): value for key, value in record.items()}
+                    for record in item.get("daily_metrics", [])
+                ),
+                horizon_decay=tuple(
+                    {str(key): value for key, value in record.items()}
+                    for record in item.get("horizon_decay", [])
+                ),
             )
             for item in value["artifacts"]
         )
@@ -167,6 +178,118 @@ def validate_default_manifest(
         if artifact.fold_index != reference.fold_index or artifact.model_name != reference.baseline_name:
             raise ValueError(f"baseline artifact identity mismatch: {prediction_path}")
     return manifest
+
+
+def build_baseline_comparison(
+    model_fold_results: Sequence[Any],
+    manifest: BaselineManifest,
+) -> dict[str, dict[str, object]]:
+    """Compare model fold/day metrics against the registered baselines."""
+    references = {(item.fold_index, item.baseline_name): item for item in manifest.artifacts}
+    comparison: dict[str, dict[str, object]] = {}
+    for baseline_name in manifest.baseline_names:
+        fold_deltas: dict[str, list[float]] = {}
+        fold_wins: dict[str, list[bool]] = {}
+        day_wins: dict[str, list[bool]] = {}
+        horizon_fold_deltas: dict[str, list[float]] = {}
+        horizon_day_wins: dict[str, list[bool]] = {}
+        for fold_result in model_fold_results:
+            reference = references[(fold_result.fold_index, baseline_name)]
+            evaluation = fold_result.evaluation
+            model_metrics = {
+                **evaluation.overall,
+                "mean_daily_ic": evaluation.mean_daily_ic,
+            }
+            baseline_metrics = {
+                **reference.overall,
+                "mean_daily_ic": reference.mean_daily_ic,
+            }
+            for metric, model_value in model_metrics.items():
+                baseline_value = baseline_metrics.get(metric)
+                if isinstance(baseline_value, (int, float)):
+                    baseline_numeric = float(baseline_value)
+                    if _finite(model_value, baseline_numeric):
+                        fold_deltas.setdefault(metric, []).append(
+                            model_value - baseline_numeric
+                        )
+                        fold_wins.setdefault(metric, []).append(
+                            _is_better(metric, model_value, baseline_numeric)
+                        )
+            baseline_daily = {
+                str(item["trade_date"]): item["metrics"]
+                for item in reference.daily_metrics
+            }
+            for daily_record in evaluation.daily:
+                daily_baseline_metrics = cast(
+                    dict[str, object], baseline_daily.get(daily_record.trade_date, {})
+                )
+                for metric, model_value in daily_record.metrics.items():
+                    raw_baseline_value = daily_baseline_metrics.get(metric)
+                    if not isinstance(raw_baseline_value, (int, float)):
+                        continue
+                    baseline_value = float(raw_baseline_value)
+                    if _finite(model_value, baseline_value):
+                        day_wins.setdefault(metric, []).append(
+                            _is_better(metric, model_value, baseline_value)
+                        )
+            baseline_horizon = {
+                int(cast(int, item["horizon_seconds"])): cast(dict[str, object], item)
+                for item in reference.horizon_decay
+            }
+            for horizon_record in evaluation.horizon_decay:
+                baseline_record = baseline_horizon.get(horizon_record.horizon_seconds)
+                if baseline_record is None:
+                    continue
+                baseline_value = float(cast(float, baseline_record["mean_daily_pearson_corr"]))
+                if _finite(horizon_record.mean_daily_pearson_corr, baseline_value):
+                    key = str(horizon_record.horizon_seconds)
+                    horizon_fold_deltas.setdefault(key, []).append(
+                        horizon_record.mean_daily_pearson_corr - baseline_value
+                    )
+                    horizon_day_values = {
+                        str(date): float(cast(float, value))
+                        for date, value in cast(
+                            list[tuple[object, object]], baseline_record.get("daily_values", [])
+                        )
+                    }
+                    for date, model_value in horizon_record.daily_values:
+                        baseline_day_value = horizon_day_values.get(date)
+                        if isinstance(baseline_day_value, (int, float)) and _finite(
+                            model_value, float(baseline_day_value)
+                        ):
+                            horizon_day_wins.setdefault(key, []).append(
+                                model_value > float(baseline_day_value)
+                            )
+        comparison[baseline_name] = {
+            "fold_delta": {
+                metric: float(np.mean(values)) for metric, values in fold_deltas.items()
+            },
+            "fold_win_ratio": {
+                metric: float(np.mean(values)) for metric, values in fold_wins.items()
+            },
+            "day_win_ratio": {
+                metric: float(np.mean(values)) for metric, values in day_wins.items()
+            },
+            "horizon_fold_delta": {
+                horizon: float(np.mean(values))
+                for horizon, values in horizon_fold_deltas.items()
+            },
+            "horizon_day_win_ratio": {
+                horizon: float(np.mean(values))
+                for horizon, values in horizon_day_wins.items()
+            },
+        }
+    return comparison
+
+
+def _finite(left: float, right: float) -> bool:
+    return bool(np.isfinite(left) and np.isfinite(right))
+
+
+def _is_better(metric: str, model_value: float, baseline_value: float) -> bool:
+    if metric in {"mae", "rmse"}:
+        return model_value < baseline_value
+    return model_value > baseline_value
 
 
 def _validate_component(value: str, *, field: str) -> None:
