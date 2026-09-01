@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -328,6 +328,75 @@ def _validate_evaluation_file(
         float(mean_daily_ic), reference.mean_daily_ic, equal_nan=True
     ):
         raise ValueError(f"baseline evaluation mean_daily_ic mismatch: {path}")
+    if not _daily_records_match(value.get("daily"), reference.daily_metrics):
+        raise ValueError(f"baseline evaluation daily metrics mismatch: {path}")
+    if not _horizon_records_match(value.get("horizon_decay"), reference.horizon_decay):
+        raise ValueError(f"baseline evaluation horizon decay mismatch: {path}")
+
+
+def _daily_records_match(
+    raw_records: object, expected_records: tuple[dict[str, object], ...]
+) -> bool:
+    if not isinstance(raw_records, list) or len(raw_records) != len(expected_records):
+        return False
+    for raw, expected in zip(raw_records, expected_records, strict=True):
+        if not isinstance(raw, Mapping) or raw.get("trade_date") != expected.get("trade_date"):
+            return False
+        raw_metrics = raw.get("metrics")
+        expected_metrics = expected.get("metrics")
+        if not isinstance(raw_metrics, Mapping) or not isinstance(expected_metrics, Mapping):
+            return False
+        if set(raw_metrics) != set(expected_metrics):
+            return False
+        if any(
+            not _same_float(raw_metrics[name], expected_metrics[name]) for name in expected_metrics
+        ):
+            return False
+    return True
+
+
+def _horizon_records_match(
+    raw_records: object, expected_records: tuple[dict[str, object], ...]
+) -> bool:
+    if not isinstance(raw_records, list) or len(raw_records) != len(expected_records):
+        return False
+    for raw, expected in zip(raw_records, expected_records, strict=True):
+        if not isinstance(raw, Mapping):
+            return False
+        for name in ("horizon_seconds", "valid_day_count", "valid_sample_count"):
+            if raw.get(name) != expected.get(name):
+                return False
+        if not _same_float(
+            raw.get("mean_daily_pearson_corr"), expected.get("mean_daily_pearson_corr")
+        ):
+            return False
+        raw_daily = raw.get("daily_values")
+        expected_daily = expected.get("daily_values")
+        if not isinstance(raw_daily, list) or not isinstance(expected_daily, (list, tuple)):
+            return False
+        if len(raw_daily) != len(expected_daily):
+            return False
+        for raw_value, expected_value in zip(raw_daily, expected_daily, strict=True):
+            if (
+                not isinstance(raw_value, (list, tuple))
+                or not isinstance(expected_value, (list, tuple))
+                or len(raw_value) != 2
+                or len(expected_value) != 2
+                or raw_value[0] != expected_value[0]
+                or not _same_float(raw_value[1], expected_value[1])
+            ):
+                return False
+    return True
+
+
+def _same_float(raw: object, expected: object) -> bool:
+    return (
+        isinstance(raw, (int, float))
+        and not isinstance(raw, bool)
+        and isinstance(expected, (int, float))
+        and not isinstance(expected, bool)
+        and bool(np.isclose(float(raw), float(expected), equal_nan=True))
+    )
 
 
 def _validate_component(value: str, *, field: str) -> None:

@@ -36,7 +36,10 @@ def test_default_manifest_round_trips_and_validates_artifacts(
     prediction_path = root / "runs" / "baseline-1" / "fold_001" / "zero" / "predictions.parquet"
     evaluation_path = prediction_path.with_name("evaluation.yaml")
     evaluation_path.parent.mkdir(parents=True, exist_ok=True)
-    evaluation_path.write_text("overall:\n  ts_ic: 0.2\nmean_daily_ic: 0.1\n", encoding="utf-8")
+    evaluation_path.write_text(
+        "overall:\n  ts_ic: 0.2\nmean_daily_ic: 0.1\ndaily: []\nhorizon_decay: []\n",
+        encoding="utf-8",
+    )
     save_prediction_artifact(artifact=_artifact(metadata), path=str(prediction_path))
     manifest = BaselineManifest(
         dataset_id=metadata.dataset_id,
