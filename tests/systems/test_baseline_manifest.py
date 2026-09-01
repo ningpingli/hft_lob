@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -15,6 +16,7 @@ from hft_lob.systems.baseline_manifest import (
     BaselineArtifactReference,
     BaselineManifest,
     baseline_space,
+    build_baseline_comparison,
     default_manifest_path,
     load_default_manifest,
     save_default_manifest,
@@ -58,6 +60,41 @@ def test_default_manifest_round_trips_and_validates_artifacts(
     assert loaded == manifest
     assert validated == manifest
     assert default_manifest_path(metadata.dataset_id).is_file()
+
+
+def test_baseline_comparison_uses_metric_direction_and_mean_daily_ic() -> None:
+    manifest = BaselineManifest(
+        dataset_id="dataset",
+        experiment_id="baseline",
+        config_hash="config",
+        fold_indices=(1,),
+        baseline_names=("zero",),
+        artifacts=(
+            BaselineArtifactReference(
+                fold_index=1,
+                baseline_name="zero",
+                predictions_path="predictions.parquet",
+                evaluation_path="evaluation.yaml",
+                overall={"mae": 1.0, "ts_ic": 0.2},
+                mean_daily_ic=0.1,
+            ),
+        ),
+    )
+    evaluation = SimpleNamespace(
+        overall={"mae": 0.5, "ts_ic": 0.3},
+        mean_daily_ic=0.2,
+        daily=(),
+        horizon_decay=(),
+    )
+    result = build_baseline_comparison(
+        (SimpleNamespace(fold_index=1, evaluation=evaluation),),
+        manifest,
+    )["zero"]
+
+    assert result["fold_delta"]["mae"] == pytest.approx(-0.5)
+    assert result["fold_delta"]["ts_ic"] == pytest.approx(0.1)
+    assert result["fold_delta"]["mean_daily_ic"] == pytest.approx(0.1)
+    assert result["fold_win_ratio"] == {"mae": 1.0, "ts_ic": 1.0, "mean_daily_ic": 1.0}
 
 
 def test_manifest_rejects_missing_requested_fold(

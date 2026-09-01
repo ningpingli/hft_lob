@@ -41,6 +41,7 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
     from hft_lob.configs import load_model_config
     from hft_lob.datasets.dataset_validator import load_dataset_package
     from hft_lob.systems.baseline_manifest import (
+        build_baseline_comparison,
         default_manifest_path,
         validate_default_manifest,
     )
@@ -95,6 +96,28 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
         config,
         executor=DefaultWalkForwardExecutor(str(log_dir / "walk_forward")),
     )
+    import yaml
+
+    (log_dir / "experiment.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "experiment_id": experiment_id,
+                "dataset_dir": str(Path(request.dataset_dir).resolve()),
+                "dataset_version": report.dataset_version,
+                "fold_indices": [result.fold_index for result in report.fold_results],
+                "model_name": config.model.name,
+                "folds": [
+                    {
+                        "fold_index": result.fold_index,
+                        "checkpoint_path": result.checkpoint_path,
+                    }
+                    for result in report.fold_results
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
     write_experiment_log(
         experiment_id,
         "walk_forward",
@@ -108,6 +131,10 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
                 ),
                 "manifest": baseline_manifest.to_dict(),
             },
+            "baseline_comparison": build_baseline_comparison(
+                report.fold_results,
+                baseline_manifest,
+            ),
         },
     )
     logger.info(
