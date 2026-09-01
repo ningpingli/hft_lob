@@ -10,10 +10,12 @@ from collections.abc import Sequence
 from hft_lob.application import (
     BaselineRunRequest,
     DatasetBuildRequest,
+    TestRequest,
     TrainingRequest,
     build_dataset,
     inspect_dataset,
     run_baseline_application,
+    run_standalone_test,
     run_training_application,
     verify_dataset,
 )
@@ -40,6 +42,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     baseline_run.add_argument("--experiment-id")
     baseline_run.add_argument("--seed", type=int)
     baseline_run.add_argument("--replace-default", action="store_true")
+
+    test = commands.add_parser("test", help="evaluate a recorded model experiment")
+    test.add_argument("--experiment-dir", required=True)
 
     train = commands.add_parser("train", help="train models from an immutable dataset")
     train.add_argument("--config", default="configs/model.yaml")
@@ -72,8 +77,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         print(f"baseline_manifest={baseline_result.manifest_path}")
         return
+    if args.command == "test":
+        test_result = run_standalone_test(TestRequest(experiment_dir=args.experiment_dir))
+        print(f"standalone_test_results={test_result.output_dir}")
+        return
 
-    result = run_training_application(
+    training_result = run_training_application(
         TrainingRequest(
             config_path=args.config,
             dataset_dir=args.dataset_dir,
@@ -82,7 +91,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             gpu_id=args.gpu_id,
         )
     )
-    print(f"walk_forward_results={result.fold_result_count}")
+    print(f"walk_forward_results={training_result.fold_result_count}")
 
 
 def _run_data_command(args: argparse.Namespace) -> None:
