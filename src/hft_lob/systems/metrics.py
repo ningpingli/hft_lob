@@ -57,6 +57,16 @@ class DailyMetricRecord:
     metrics: dict[str, float]
 
 @dataclass(frozen=True)
+class HorizonCorrelationRecord:
+    """一个 future horizon 的 Mean Daily Pearson Corr。"""
+
+    horizon_seconds: int
+    mean_daily_pearson_corr: float
+    valid_day_count: int
+    valid_sample_count: int
+    daily_values: tuple[tuple[str, float], ...] = ()
+
+@dataclass(frozen=True)
 class PredictionBinRecord:
     """一个预测分位桶的边界、样本量及平均预测/实现收益。"""
 
@@ -80,6 +90,7 @@ class EvaluationReport:
     daily_summary: dict[str, float]
     confidence_intervals: dict[str, ConfidenceInterval]
     prediction_bins: tuple[PredictionBinRecord, ...]
+    horizon_decay: tuple[HorizonCorrelationRecord, ...] = ()
 
 
 def mae(preds: np.ndarray, targets: np.ndarray) -> float:
@@ -162,6 +173,32 @@ def mean_daily_ic(daily_ics: np.ndarray) -> float:
     """Mean Daily IC：有限交易日 TS-IC 的算术平均。"""
     values = _finite_vector(daily_ics)
     return float(np.mean(values)) if values.size else float("nan")
+
+def horizon_pearson_decay(
+    preds: np.ndarray,
+    targets_by_horizon: dict[int, np.ndarray],
+    trade_dates: np.ndarray,
+) -> tuple[HorizonCorrelationRecord, ...]:
+    """Calculate Mean Daily Pearson Corr for every future horizon."""
+    records: list[HorizonCorrelationRecord] = []
+    for horizon, targets in sorted(targets_by_horizon.items()):
+        daily = daily_ic_records(preds, targets, trade_dates)
+        finite = np.asarray([record.ic for record in daily], dtype=np.float64)
+        prediction, target = _paired_vectors(preds, targets)
+        valid_samples = int(np.count_nonzero(np.isfinite(prediction) & np.isfinite(target)))
+        finite_values = finite[np.isfinite(finite)]
+        records.append(
+            HorizonCorrelationRecord(
+                horizon_seconds=horizon,
+                mean_daily_pearson_corr=(
+                    float(np.mean(finite_values)) if finite_values.size else float("nan")
+                ),
+                valid_day_count=int(finite_values.size),
+                valid_sample_count=valid_samples,
+                daily_values=tuple((record.trade_date, record.ic) for record in daily),
+            )
+        )
+    return tuple(records)
 
 def icir(daily_ics: np.ndarray) -> float:
     """ICIR = mean(daily_IC) / std(daily_IC)（§21 稳定性）。"""
@@ -331,6 +368,11 @@ def build_evaluation_report(
     daily_ic = daily_ic_records(predictions, targets, trade_dates)
     daily_ic_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
     report_mean_daily_ic = mean_daily_ic(daily_ic_values)
+    horizon_decay = horizon_pearson_decay(
+        predictions,
+        artifact.targets_by_horizon,
+        trade_dates,
+    )
     daily: tuple[DailyMetricRecord, ...] = ()
     daily_summary: dict[str, float] = {"mean_daily_ic": report_mean_daily_ic}
     if config.report_daily:
@@ -388,6 +430,7 @@ def build_evaluation_report(
         daily_summary=daily_summary,
         confidence_intervals=confidence_intervals,
         prediction_bins=bins,
+        horizon_decay=horizon_decay,
     )
 
 
