@@ -110,6 +110,22 @@ def test_prediction_artifact_round_trips_horizon_targets(tmp_path: Path) -> None
     assert loaded.targets_by_horizon[120].tolist() == pytest.approx([0.02, 0.03])
 
 
+def test_prediction_artifact_allows_nan_for_invalid_horizon_targets() -> None:
+    artifact = PredictionArtifact(
+        predictions=np.asarray([0.01, 0.02]),
+        targets=np.asarray([0.015, 0.025]),
+        targets_by_horizon={60: np.asarray([0.015, np.nan])},
+        metadata=_metadata(),
+        model_name="cnn1",
+        model_version="model-v1",
+        dataset_version="dataset-v1",
+        fold_index=2,
+        split="test",
+    )
+
+    assert np.isnan(artifact.targets_by_horizon[60][1])
+
+
 def test_prediction_artifact_rejects_mismatched_or_duplicate_samples() -> None:
     with pytest.raises(ValueError, match="same sample count"):
         PredictionArtifact(

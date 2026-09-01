@@ -167,16 +167,18 @@ def validate_default_manifest(
     root = baseline_space(manifest.dataset_id).resolve()
     for key in expected:
         reference = references[key]
-        prediction_path = (root / reference.predictions_path).resolve()
-        try:
-            prediction_path.relative_to(root)
-        except ValueError as exc:
-            raise ValueError("baseline manifest contains a path outside its dataset space") from exc
+        prediction_path = _manifest_file(
+            root, reference.predictions_path, field="predictions_path"
+        )
+        evaluation_path = _manifest_file(root, reference.evaluation_path, field="evaluation_path")
         artifact = load_prediction_artifact(str(prediction_path))
+        _validate_evaluation_file(evaluation_path, reference)
         if artifact.dataset_version != manifest.dataset_id:
             raise ValueError(f"baseline artifact dataset mismatch: {prediction_path}")
         if artifact.fold_index != reference.fold_index or artifact.model_name != reference.baseline_name:
             raise ValueError(f"baseline artifact identity mismatch: {prediction_path}")
+        if artifact.split != "test" or artifact.metadata[0].ticker != package.metadata.ticker:
+            raise ValueError(f"baseline artifact split/ticker mismatch: {prediction_path}")
     return manifest
 
 
@@ -290,6 +292,42 @@ def _is_better(metric: str, model_value: float, baseline_value: float) -> bool:
     if metric in {"mae", "rmse"}:
         return model_value < baseline_value
     return model_value > baseline_value
+
+
+def _manifest_file(root: Path, relative_path: str, *, field: str) -> Path:
+    path = (root / relative_path).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"baseline manifest {field} is outside its dataset space") from exc
+    if not path.is_file():
+        raise ValueError(f"baseline manifest {field} does not exist: {path}")
+    return path
+
+
+def _validate_evaluation_file(
+    path: Path, reference: BaselineArtifactReference
+) -> None:
+    try:
+        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid baseline evaluation YAML: {path}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"baseline evaluation root must be a mapping: {path}")
+    overall = value.get("overall")
+    if not isinstance(overall, dict) or set(overall) != set(reference.overall):
+        raise ValueError(f"baseline evaluation overall metrics mismatch: {path}")
+    for metric, reference_value in reference.overall.items():
+        raw_value = overall.get(metric)
+        if not isinstance(raw_value, (int, float)) or not np.isclose(
+            float(raw_value), reference_value, equal_nan=True
+        ):
+            raise ValueError(f"baseline evaluation overall metrics mismatch: {path}")
+    mean_daily_ic = value.get("mean_daily_ic")
+    if not isinstance(mean_daily_ic, (int, float)) or not np.isclose(
+        float(mean_daily_ic), reference.mean_daily_ic, equal_nan=True
+    ):
+        raise ValueError(f"baseline evaluation mean_daily_ic mismatch: {path}")
 
 
 def _validate_component(value: str, *, field: str) -> None:

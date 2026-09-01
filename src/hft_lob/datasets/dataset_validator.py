@@ -129,10 +129,23 @@ class DatasetPackageMetadata:
             raise ValueError("feature_columns must be non-empty and unique")
         if self.snapshot_interval_seconds <= 0 or self.history_snapshots <= 0:
             raise ValueError("snapshot_interval_seconds and history_snapshots must be > 0")
-        if not self.target_horizons_seconds:
-            raise ValueError("target_horizons_seconds must not be empty")
-        if self.primary_horizon_seconds not in self.target_horizons_seconds:
+        horizons = tuple(self.target_horizons_seconds)
+        if not horizons or len(set(horizons)) != len(horizons):
+            raise ValueError("target_horizons_seconds must be non-empty and unique")
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in horizons
+        ):
+            raise ValueError("target_horizons_seconds must contain positive integers")
+        if (
+            not isinstance(self.primary_horizon_seconds, int)
+            or isinstance(self.primary_horizon_seconds, bool)
+            or self.primary_horizon_seconds <= 0
+        ):
+            raise ValueError("primary_horizon_seconds must be a positive integer")
+        if self.primary_horizon_seconds not in horizons:
             raise ValueError("primary_horizon_seconds must be included in target horizons")
+        object.__setattr__(self, "target_horizons_seconds", horizons)
         if self.normalization_window < 2:
             raise ValueError("normalization_window must be >= 2")
         expected = compute_dataset_id(
@@ -163,7 +176,9 @@ class DatasetPackageMetadata:
         horizons = value["target_horizons_seconds"]
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
-        if not isinstance(horizons, list) or not all(isinstance(item, int) for item in horizons):
+        if not isinstance(horizons, list) or not all(
+            isinstance(item, int) and not isinstance(item, bool) for item in horizons
+        ):
             raise ValueError("target_horizons_seconds must be a list of integers")
         payload: dict[str, Any] = {
             **value,
@@ -254,6 +269,14 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
         raise ValueError("array dtype does not match dataset metadata")
     if validity.dtype != np.bool_ or market.dtype != np.float32:
         raise ValueError("validity.npy must be bool and market.npy must be float32")
+    if np.any(np.isinf(targets)):
+        raise ValueError("targets.npy must not contain infinite values")
+    valid_feature_rows = validity[:, 0]
+    if np.any(valid_feature_rows & ~np.isfinite(features).all(axis=1)):
+        raise ValueError("valid feature rows must contain only finite values")
+    valid_targets = validity[:, 1:]
+    if np.any(valid_targets & ~np.isfinite(targets)):
+        raise ValueError("valid target entries must contain only finite values")
 
     rows = pl.read_parquet(root / "rows.parquet")
     _validate_rows(rows, row_count)
@@ -268,7 +291,16 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
         for index_path in expected:
             frame = pl.read_parquet(index_path)
             validate_fold_index(frame)
-            _validate_fold_references(frame, rows, validity, row_count, metadata.history_snapshots)
+            _validate_fold_references(
+                frame,
+                rows,
+                validity,
+                row_count,
+                metadata.history_snapshots,
+                1 + metadata.target_horizons_seconds.index(
+                    metadata.primary_horizon_seconds
+                ),
+            )
     return metadata
 
 
@@ -353,6 +385,7 @@ def _validate_fold_references(
     validity: np.ndarray,
     row_count: int,
     history_snapshots: int,
+    primary_validity_index: int,
 ) -> None:
     invalid = frame.filter(
         (pl.col("global_anchor_index") >= row_count)
@@ -363,7 +396,10 @@ def _validate_fold_references(
         raise ValueError("fold index contains an invalid global or session-local anchor")
     for anchor in frame.get_column("global_anchor_index"):
         start = anchor - history_snapshots + 1
-        if not validity[start : anchor + 1, 0].all() or not validity[anchor, 1]:
+        if (
+            not validity[start : anchor + 1, 0].all()
+            or not validity[anchor, primary_validity_index]
+        ):
             raise ValueError("fold index references an invalid sample window")
     referenced = frame.join(
         rows,

@@ -64,15 +64,31 @@ class PredictionArtifact:
                 "predictions, targets and metadata must have the same sample count"
             )
         horizon_targets: dict[int, np.ndarray] = {}
+        for field_name, value in (
+            ("model_name", self.model_name),
+            ("model_version", self.model_version),
+            ("dataset_version", self.dataset_version),
+            ("split", self.split),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must not be empty")
+        if (
+            not isinstance(self.fold_index, int)
+            or isinstance(self.fold_index, bool)
+            or self.fold_index <= 0
+        ):
+            raise ValueError("fold_index must be > 0")
         for horizon, values in self.targets_by_horizon.items():
-            if horizon <= 0:
-                raise ValueError("target horizons must be > 0")
-            horizon_target = _as_vector(values, field=f"targets_by_horizon[{horizon}]")
+            if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
+                raise ValueError("target horizons must be positive integers")
+            horizon_target = _as_vector(
+                values,
+                field=f"targets_by_horizon[{horizon}]",
+                allow_nan=True,
+            )
             if horizon_target.size != predictions.size:
                 raise ValueError("all horizon targets must have the same sample count")
             horizon_targets[int(horizon)] = horizon_target
-        if self.targets_by_horizon and self.targets.size != predictions.size:
-            raise ValueError("primary target must have the same sample count as predictions")
 
         sample_keys: set[tuple[str, str, str, str]] = set()
         tickers: set[str] = set()
@@ -194,13 +210,22 @@ def load_prediction_artifact(path: str) -> PredictionArtifact:
         field: _single_artifact_field(frame, field)
         for field in ("model_name", "model_version", "dataset_version", "fold_index", "split")
     }
-    horizon_targets = {
-        int(name.removeprefix("target_").removesuffix("s")): np.asarray(
+    horizon_targets: dict[int, np.ndarray] = {}
+    for name in full_frame.columns:
+        if not name.startswith("target_") or not name.endswith("s"):
+            continue
+        raw_horizon = name.removeprefix("target_").removesuffix("s")
+        try:
+            horizon = int(raw_horizon)
+        except ValueError as exc:
+            raise ValueError(f"invalid horizon target column: {name}") from exc
+        if name != f"target_{horizon}s":
+            raise ValueError(f"non-canonical horizon target column: {name}")
+        if horizon in horizon_targets:
+            raise ValueError(f"duplicate horizon target column: {name}")
+        horizon_targets[horizon] = np.asarray(
             full_frame[name].to_numpy(), dtype=np.float64
         )
-        for name in full_frame.columns
-        if name.startswith("target_") and name.endswith("s")
-    }
     metadata = tuple(
         SampleMeta(
             ticker=str(row["ticker"]),
@@ -244,13 +269,21 @@ def _format_anchor_timestamp(value: object) -> str:
     raise ValueError(f"invalid anchor_timestamp: {value!r}")
 
 
-def _as_vector(values: np.ndarray, *, field: str) -> np.ndarray:
+def _as_vector(
+    values: np.ndarray,
+    *,
+    field: str,
+    allow_nan: bool = False,
+) -> np.ndarray:
     array = np.asarray(values, dtype=np.float64)
     if array.ndim == 2 and array.shape[1] == 1:
         array = array[:, 0]
     if array.ndim != 1:
         raise ValueError(f"{field} must have shape [N] or [N, 1], got {array.shape}")
-    if not np.isfinite(array).all():
+    if allow_nan:
+        if np.isinf(array).any():
+            raise ValueError(f"{field} must not contain infinite values")
+    elif not np.isfinite(array).all():
         raise ValueError(f"{field} must contain only finite values")
     return np.ascontiguousarray(array.copy())
 

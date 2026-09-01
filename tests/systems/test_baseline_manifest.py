@@ -34,6 +34,9 @@ def test_default_manifest_round_trips_and_validates_artifacts(
     package = DatasetPackage(root=tmp_path / metadata.dataset_id, metadata=metadata)
     root = baseline_space(metadata.dataset_id)
     prediction_path = root / "runs" / "baseline-1" / "fold_001" / "zero" / "predictions.parquet"
+    evaluation_path = prediction_path.with_name("evaluation.yaml")
+    evaluation_path.parent.mkdir(parents=True, exist_ok=True)
+    evaluation_path.write_text("overall:\n  ts_ic: 0.2\nmean_daily_ic: 0.1\n", encoding="utf-8")
     save_prediction_artifact(artifact=_artifact(metadata), path=str(prediction_path))
     manifest = BaselineManifest(
         dataset_id=metadata.dataset_id,
@@ -46,7 +49,7 @@ def test_default_manifest_round_trips_and_validates_artifacts(
                 fold_index=1,
                 baseline_name="zero",
                 predictions_path=prediction_path.relative_to(root).as_posix(),
-                evaluation_path="runs/baseline-1/fold_001/zero/evaluation.yaml",
+                evaluation_path=evaluation_path.relative_to(root).as_posix(),
                 overall={"ts_ic": 0.2},
                 mean_daily_ic=0.1,
             ),

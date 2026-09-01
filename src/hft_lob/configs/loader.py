@@ -165,7 +165,11 @@ def _validate_data_config(config: DataBuildConfig) -> None:
         "target.horizons_seconds_count": len(config.target.horizons_seconds),
         "window.history_snapshots": config.window.history_snapshots,
     }
-    invalid = [name for name, value in positive.items() if not isinstance(value, int) or value <= 0]
+    invalid = [
+        name
+        for name, value in positive.items()
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0
+    ]
     if invalid:
         raise ValueError(f"config integer fields must be > 0: {invalid}")
     if config.target.type not in {"log_mid_return", "simple_mid_return"}:

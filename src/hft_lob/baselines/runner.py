@@ -72,3 +72,11 @@ def _validate_batch(batch: LOBBatch) -> None:
         raise ValueError("batch features, targets and metadata counts must match")
     if not torch.isfinite(batch.features).all() or not torch.isfinite(batch.targets).all():
         raise ValueError("batch features and targets must be finite")
+    batch_size = batch.features.shape[0]
+    for horizon, values in batch.targets_by_horizon.items():
+        if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
+            raise ValueError("target horizons must be positive integers")
+        if values.ndim != 2 or values.shape != (batch_size, 1):
+            raise ValueError("horizon targets must have shape [B,1]")
+        if torch.isinf(values).any():
+            raise ValueError("horizon targets must not contain infinite values")

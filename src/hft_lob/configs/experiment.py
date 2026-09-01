@@ -68,6 +68,12 @@ class TargetConfig:
             raise ValueError("horizons_seconds must be non-empty and unique")
         if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in horizons):
             raise ValueError("horizons_seconds must contain positive integers")
+        if (
+            not isinstance(self.primary_horizon_seconds, int)
+            or isinstance(self.primary_horizon_seconds, bool)
+            or self.primary_horizon_seconds <= 0
+        ):
+            raise ValueError("primary_horizon_seconds must be a positive integer")
         if self.primary_horizon_seconds not in horizons:
             raise ValueError("primary_horizon_seconds must be included in horizons_seconds")
         if self.tolerance_seconds < 0:
