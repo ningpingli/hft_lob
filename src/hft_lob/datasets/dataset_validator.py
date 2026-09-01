@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-PACKAGE_SCHEMA_VERSION = 2
+PACKAGE_SCHEMA_VERSION = 3
 SUCCESS_MARKER = "_SUCCESS"
 FOLD_INDEX_COLUMNS = (
     "global_anchor_index",
@@ -104,6 +104,8 @@ class DatasetPackageMetadata:
     source_hash: str
     processing_config_hash: str
     fold_plan_hash: str
+    target_horizons_seconds: tuple[int, ...] = (60,)
+    primary_horizon_seconds: int = 60
     schema_version: int = PACKAGE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
@@ -127,6 +129,10 @@ class DatasetPackageMetadata:
             raise ValueError("feature_columns must be non-empty and unique")
         if self.snapshot_interval_seconds <= 0 or self.history_snapshots <= 0:
             raise ValueError("snapshot_interval_seconds and history_snapshots must be > 0")
+        if not self.target_horizons_seconds:
+            raise ValueError("target_horizons_seconds must not be empty")
+        if self.primary_horizon_seconds not in self.target_horizons_seconds:
+            raise ValueError("primary_horizon_seconds must be included in target horizons")
         if self.normalization_window < 2:
             raise ValueError("normalization_window must be >= 2")
         expected = compute_dataset_id(
@@ -141,6 +147,7 @@ class DatasetPackageMetadata:
     def to_dict(self) -> dict[str, object]:
         value = asdict(self)
         value["feature_columns"] = list(self.feature_columns)
+        value["target_horizons_seconds"] = list(self.target_horizons_seconds)
         return value
 
     @classmethod
@@ -153,10 +160,17 @@ class DatasetPackageMetadata:
                 f"invalid dataset metadata fields: missing={missing}, unknown={unknown}"
             )
         columns = value["feature_columns"]
+        horizons = value["target_horizons_seconds"]
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
-        return cls(**{**value, "feature_columns": tuple(columns)})  # type: ignore[arg-type]
-
+        if not isinstance(horizons, list) or not all(isinstance(item, int) for item in horizons):
+            raise ValueError("target_horizons_seconds must be a list of integers")
+        payload: dict[str, Any] = {
+            **value,
+            "feature_columns": tuple(columns),
+            "target_horizons_seconds": tuple(horizons),
+        }
+        return cls(**payload)
 
 @dataclass(frozen=True)
 class DatasetPackage:
@@ -223,8 +237,8 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
     row_count = features.shape[0]
     expected_shapes = {
         "features.npy": (row_count, len(metadata.feature_columns)),
-        "targets.npy": (row_count, 1),
-        "validity.npy": (row_count, 2),
+        "targets.npy": (row_count, len(metadata.target_horizons_seconds)),
+        "validity.npy": (row_count, 1 + len(metadata.target_horizons_seconds)),
         "market.npy": (row_count, 4),
     }
     arrays = {

@@ -31,7 +31,9 @@ class PrebuiltLOBDataset(Dataset):
     def __len__(self) -> int:
         return self.index.height
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, SampleMeta]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[int, torch.Tensor], SampleMeta]:
         if index < 0:
             index += len(self)
         if index < 0 or index >= len(self):
@@ -44,7 +46,15 @@ class PrebuiltLOBDataset(Dataset):
         if start < session_start:
             raise ValueError("sample window crosses a session boundary")
         features = torch.from_numpy(cast(np.ndarray, self._features)[start : anchor + 1].copy())
-        target = torch.from_numpy(cast(np.ndarray, self._targets)[anchor].copy())
+        target_row = cast(np.ndarray, self._targets)[anchor]
+        primary_index = self.metadata.target_horizons_seconds.index(
+            self.metadata.primary_horizon_seconds
+        )
+        target = torch.from_numpy(target_row[primary_index : primary_index + 1].copy())
+        targets_by_horizon = {
+            horizon: torch.from_numpy(target_row[position : position + 1].copy())
+            for position, horizon in enumerate(self.metadata.target_horizons_seconds)
+        }
         market = cast(np.ndarray, self._market)[anchor]
         timestamp = cast(datetime, row["anchor_timestamp"])
         sample = SampleMeta(
@@ -58,7 +68,7 @@ class PrebuiltLOBDataset(Dataset):
             ask1=float(market[3]),
             spread=float(market[3] - market[2]),
         )
-        return features, target, sample
+        return features, target, targets_by_horizon, sample
 
     def __getstate__(self) -> dict[str, object]:
         state = dict(self.__dict__)

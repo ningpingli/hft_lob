@@ -34,9 +34,9 @@ class RandomizedPrebuiltDataset(PrebuiltLOBDataset):
     """测试专用包装：让每个 worker 同时消费三套随机流。"""
 
     def __getitem__(self, index: int):  # type: ignore[no-untyped-def]
-        features, target, metadata = super().__getitem__(index)
+        features, target, targets_by_horizon, metadata = super().__getitem__(index)
         noise = random.random() + float(np.random.random()) + float(torch.rand(()))
-        return features + noise, target, metadata
+        return features + noise, target, targets_by_horizon, metadata
 
 
 def _raw_row(timestamp: datetime, *, step: int, day: int) -> dict[str, object]:
@@ -58,7 +58,7 @@ def _config(tmp_path: Path) -> DataBuildConfig:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(max_ffill_gap_seconds=6),
-        target=TargetConfig(horizon_seconds=6, tolerance_seconds=0),
+        target=TargetConfig(horizons_seconds=(6,), primary_horizon_seconds=6, tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(use_derived=False),
