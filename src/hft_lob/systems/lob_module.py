@@ -40,6 +40,12 @@ class LOBLightningModule(L.LightningModule):
         )
         self.output_dim = config.model.output_dim if target_count is None else target_count
         self.labels = tuple(range(1, self.output_dim + 1)) if labels is None else tuple(labels)
+        if (
+            not self.labels
+            or len(set(self.labels)) != len(self.labels)
+            or any(label <= 0 for label in self.labels)
+        ):
+            raise ValueError("labels must be non-empty, unique, and positive")
         if len(self.labels) != self.output_dim:
             raise ValueError("labels must match target_count")
         if self.output_dim <= 0:

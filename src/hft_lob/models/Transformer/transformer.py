@@ -136,10 +136,10 @@ class Transformer(nn.Module):
         """前向传播。
 
         Args:
-            x: 统一时序输入 ``[B, T, F]``。
+            x: 输入张量 ``(N, 1, history_length, num_features)``。
 
         Returns:
-            无界回归预测，形状为 ``[B, output_dim]``。
+            模型输出 ``(N, 1)``。
 
         Raises:
             ValueError: 输入维度或特征维度与构造契约不一致。

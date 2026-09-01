@@ -165,16 +165,13 @@ def load_prediction_artifact(path: str) -> PredictionArtifact:
     missing = sorted(set(_ARTIFACT_SCHEMA).difference(full_frame.columns))
     if missing:
         raise ValueError(f"prediction artifact is missing columns: {missing}")
-    label_names = sorted(
-        (
-            name
-            for name in full_frame.columns
-            if name.startswith("target_")
-            and name.endswith("s")
-            and not name.startswith("target_valid_")
-        ),
-        key=lambda name: int(name.removeprefix("target_").removesuffix("s")),
-    )
+    label_names = [
+        name
+        for name in full_frame.columns
+        if name.startswith("target_")
+        and name.endswith("s")
+        and not name.startswith("target_valid_")
+    ]
     if not label_names:
         raise ValueError("prediction artifact contains no target label columns")
     labels = tuple(int(name.removeprefix("target_").removesuffix("s")) for name in label_names)

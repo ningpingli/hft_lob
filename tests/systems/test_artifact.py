@@ -92,6 +92,8 @@ def test_prediction_artifact_round_trips_complete_target_matrix(tmp_path: Path) 
     np.testing.assert_array_equal(loaded.target_valid, artifact.target_valid)
 
 
+
+
 def test_prediction_artifact_rejects_mismatched_or_duplicate_samples() -> None:
     with pytest.raises(ValueError, match="same shape"):
         PredictionArtifact(

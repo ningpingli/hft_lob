@@ -1,4 +1,4 @@
-"""纯模型层：统一 ``forward([B,T,F]) -> [B,1]`` 契约（需求文档 §18）。
+"""纯模型层：统一 ``forward([B,T,F]) -> [B,L]`` 契约（需求文档 §18）。
 
 ``[B,T,F]`` 是与模型无关的数据语义；CNN/DeepLOB 在各自 ``forward`` 内部
 增加 channel 维，Transformer 类模型直接消费三维输入。
