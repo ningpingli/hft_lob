@@ -135,12 +135,7 @@ def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
         loader=LoaderConfig(batch_size=8),
         model=ModelConfig(name="cnn1"),
         training=TrainingConfig(epochs=1, patience=0),
-        evaluation=EvaluationConfig(
-            metrics=("mae", "ts_ic"),
-            prediction_bins=2,
-            bootstrap_samples=2,
-            bootstrap_block_size=2,
-        ),
+        evaluation=EvaluationConfig(prediction_bins=2),
         folds=FoldSelectionConfig(),
         seed=7,
     )

@@ -41,8 +41,9 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
     from hft_lob.configs import load_model_config
     from hft_lob.datasets.dataset_validator import load_dataset_package
     from hft_lob.systems.baseline_manifest import (
+        build_baseline_comparison,
         default_manifest_path,
-        validate_default_manifest,
+        load_validated_reference_reports,
     )
     from hft_lob.systems.executor import DefaultWalkForwardExecutor
     from hft_lob.systems.walk_forward import run_walk_forward, select_package_folds
@@ -73,7 +74,7 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
         seed=config.seed if request.seed is None else request.seed,
     )
     selected_folds = select_package_folds(package.root, config.folds)
-    baseline_manifest = validate_default_manifest(
+    baseline_manifest, baseline_reports = load_validated_reference_reports(
         package,
         fold_indices=selected_folds,
     )
@@ -108,6 +109,11 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
                 ),
                 "manifest": baseline_manifest.to_dict(),
             },
+            "baseline_comparison": build_baseline_comparison(
+                report.fold_results,
+                baseline_manifest,
+                reference_reports=baseline_reports,
+            ),
         },
     )
     logger.info(

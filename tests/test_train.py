@@ -55,13 +55,13 @@ def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
 
 
 def test_callback_factories(tmp_path: Path) -> None:
-    checkpoint = train.build_checkpoint_callback(str(tmp_path), monitor="val/ts_ic", mode="max")
+    checkpoint = train.build_checkpoint_callback(str(tmp_path), monitor="val/mse", mode="min")
     early_stopping = train.build_early_stopping_callback(
-        monitor="val/ts_ic", mode="max", patience=3
+        monitor="val/mse", mode="min", patience=3
     )
 
     assert isinstance(checkpoint, ModelCheckpoint)
-    assert checkpoint.monitor == "val/ts_ic"
+    assert checkpoint.monitor == "val/mse"
     assert checkpoint.dirpath == str(tmp_path.resolve())
     assert isinstance(early_stopping, EarlyStopping)
     assert early_stopping.patience == 3
