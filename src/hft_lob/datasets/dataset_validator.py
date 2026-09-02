@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-PACKAGE_SCHEMA_VERSION = 2
+PACKAGE_SCHEMA_VERSION = 4
 SUCCESS_MARKER = "_SUCCESS"
 FOLD_INDEX_COLUMNS = (
     "global_anchor_index",
@@ -94,7 +94,7 @@ class DatasetPackageMetadata:
     dataset_id: str
     ticker: str
     feature_columns: tuple[str, ...]
-    target_column: str
+    target_columns: tuple[str, ...]
     feature_dtype: str
     target_dtype: str
     snapshot_interval_seconds: int
@@ -104,13 +104,13 @@ class DatasetPackageMetadata:
     source_hash: str
     processing_config_hash: str
     fold_plan_hash: str
+    labels: tuple[int, ...] = (60,)
     schema_version: int = PACKAGE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         text_fields = (
             "dataset_id",
             "ticker",
-            "target_column",
             "feature_dtype",
             "target_dtype",
             "normalization_mode",
@@ -125,6 +125,16 @@ class DatasetPackageMetadata:
             raise ValueError(f"unsupported dataset schema version: {self.schema_version}")
         if not self.feature_columns or len(set(self.feature_columns)) != len(self.feature_columns):
             raise ValueError("feature_columns must be non-empty and unique")
+        if not self.target_columns or len(set(self.target_columns)) != len(self.target_columns):
+            raise ValueError("target_columns must be non-empty and unique")
+        labels = tuple(self.labels)
+        if not labels or len(set(labels)) != len(labels):
+            raise ValueError("labels must be non-empty and unique")
+        if any(not isinstance(label, int) or isinstance(label, bool) or label <= 0 for label in labels):
+            raise ValueError("labels must contain positive integers")
+        valid_target_columns = {tuple(f"Target_{label}s_{suffix}" for label in labels) for suffix in ("log", "simple")}
+        if self.target_columns not in valid_target_columns:
+            raise ValueError("target_columns must match labels in order and target type")
         if self.snapshot_interval_seconds <= 0 or self.history_snapshots <= 0:
             raise ValueError("snapshot_interval_seconds and history_snapshots must be > 0")
         if self.normalization_window < 2:
@@ -137,10 +147,13 @@ class DatasetPackageMetadata:
         )
         if self.dataset_id != expected:
             raise ValueError("dataset_id does not match package identity fields")
+        object.__setattr__(self, "labels", labels)
 
     def to_dict(self) -> dict[str, object]:
         value = asdict(self)
         value["feature_columns"] = list(self.feature_columns)
+        value["target_columns"] = list(self.target_columns)
+        value["labels"] = list(self.labels)
         return value
 
     @classmethod
@@ -153,10 +166,23 @@ class DatasetPackageMetadata:
                 f"invalid dataset metadata fields: missing={missing}, unknown={unknown}"
             )
         columns = value["feature_columns"]
+        targets = value["target_columns"]
+        labels = value["labels"]
         if not isinstance(columns, list) or not all(isinstance(item, str) for item in columns):
             raise ValueError("feature_columns must be a list of strings")
-        return cls(**{**value, "feature_columns": tuple(columns)})  # type: ignore[arg-type]
-
+        if not isinstance(targets, list) or not all(isinstance(item, str) for item in targets):
+            raise ValueError("target_columns must be a list of strings")
+        if not isinstance(labels, list) or not all(
+            isinstance(item, int) and not isinstance(item, bool) for item in labels
+        ):
+            raise ValueError("labels must be a list of integers")
+        payload: dict[str, Any] = {
+            **value,
+            "feature_columns": tuple(columns),
+            "target_columns": tuple(targets),
+            "labels": tuple(labels),
+        }
+        return cls(**payload)
 
 @dataclass(frozen=True)
 class DatasetPackage:
@@ -223,8 +249,8 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
     row_count = features.shape[0]
     expected_shapes = {
         "features.npy": (row_count, len(metadata.feature_columns)),
-        "targets.npy": (row_count, 1),
-        "validity.npy": (row_count, 2),
+        "targets.npy": (row_count, len(metadata.labels)),
+        "validity.npy": (row_count, 1 + len(metadata.labels)),
         "market.npy": (row_count, 4),
     }
     arrays = {

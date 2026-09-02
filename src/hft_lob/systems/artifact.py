@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -51,6 +51,7 @@ class PredictionArtifact:
     dataset_version: str
     fold_index: int
     split: str
+    targets_by_horizon: dict[int, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         predictions = _as_vector(self.predictions, field="predictions")
@@ -62,16 +63,16 @@ class PredictionArtifact:
             raise ValueError(
                 "predictions, targets and metadata must have the same sample count"
             )
-        for field, value in (
-            ("model_name", self.model_name),
-            ("model_version", self.model_version),
-            ("dataset_version", self.dataset_version),
-            ("split", self.split),
-        ):
-            if not value.strip():
-                raise ValueError(f"{field} must not be empty")
-        if self.fold_index <= 0:
-            raise ValueError("fold_index must be > 0")
+        horizon_targets: dict[int, np.ndarray] = {}
+        for horizon, values in self.targets_by_horizon.items():
+            if horizon <= 0:
+                raise ValueError("target horizons must be > 0")
+            horizon_target = _as_vector(values, field=f"targets_by_horizon[{horizon}]")
+            if horizon_target.size != predictions.size:
+                raise ValueError("all horizon targets must have the same sample count")
+            horizon_targets[int(horizon)] = horizon_target
+        if self.targets_by_horizon and self.targets.size != predictions.size:
+            raise ValueError("primary target must have the same sample count as predictions")
 
         sample_keys: set[tuple[str, str, str, str]] = set()
         tickers: set[str] = set()
@@ -105,6 +106,9 @@ class PredictionArtifact:
         object.__setattr__(self, "predictions", predictions)
         object.__setattr__(self, "targets", targets)
         object.__setattr__(self, "metadata", metadata)
+        for values in horizon_targets.values():
+            values.setflags(write=False)
+        object.__setattr__(self, "targets_by_horizon", horizon_targets)
 
 
 def save_prediction_artifact(
@@ -126,33 +130,33 @@ def save_prediction_artifact(
         raise ValueError("prediction artifact path must end with .parquet")
 
     records: list[dict[str, object]] = []
-    for prediction, target, meta in zip(
-        artifact.predictions,
-        artifact.targets,
-        artifact.metadata,
-        strict=True,
+    for index, (prediction, target, meta) in enumerate(
+        zip(artifact.predictions, artifact.targets, artifact.metadata, strict=True)
     ):
-        records.append(
-            {
-                "model_name": artifact.model_name,
-                "model_version": artifact.model_version,
-                "dataset_version": artifact.dataset_version,
-                "fold_index": artifact.fold_index,
-                "split": artifact.split,
-                "ticker": meta.ticker,
-                "trade_date": meta.trade_date,
-                "session_id": meta.session_id,
-                "anchor_timestamp": _parse_anchor_timestamp(meta.anchor_timestamp),
-                "mid_t": meta.mid_t,
-                "future_mid": meta.future_mid,
-                "target": float(target),
-                "prediction": float(prediction),
-                "bid1": meta.bid1,
-                "ask1": meta.ask1,
-                "spread": meta.spread,
-            }
-        )
-    frame = pl.DataFrame(records, schema=_ARTIFACT_SCHEMA, strict=True)
+        record: dict[str, object] = {
+            "model_name": artifact.model_name,
+            "model_version": artifact.model_version,
+            "dataset_version": artifact.dataset_version,
+            "fold_index": artifact.fold_index,
+            "split": artifact.split,
+            "ticker": meta.ticker,
+            "trade_date": meta.trade_date,
+            "session_id": meta.session_id,
+            "anchor_timestamp": _parse_anchor_timestamp(meta.anchor_timestamp),
+            "mid_t": meta.mid_t,
+            "future_mid": meta.future_mid,
+            "target": float(target),
+            "prediction": float(prediction),
+            "bid1": meta.bid1,
+            "ask1": meta.ask1,
+            "spread": meta.spread,
+        }
+        for horizon, values in artifact.targets_by_horizon.items():
+            record[f"target_{horizon}s"] = float(values[index])
+        records.append(record)
+    schema = dict(_ARTIFACT_SCHEMA)
+    schema.update({f"target_{horizon}s": pl.Float64 for horizon in artifact.targets_by_horizon})
+    frame = pl.DataFrame(records, schema=schema, strict=True)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
@@ -178,17 +182,24 @@ def load_prediction_artifact(path: str) -> PredictionArtifact:
     if not source.is_file():
         raise FileNotFoundError(source)
 
-    frame = pl.read_parquet(source)
-    missing = sorted(set(_ARTIFACT_SCHEMA).difference(frame.columns))
+    full_frame = pl.read_parquet(source)
+    missing = sorted(set(_ARTIFACT_SCHEMA).difference(full_frame.columns))
     if missing:
         raise ValueError(f"prediction artifact is missing columns: {missing}")
-    frame = frame.select(list(_ARTIFACT_SCHEMA))
+    frame = full_frame.select(list(_ARTIFACT_SCHEMA))
     if frame.height == 0:
         raise ValueError("prediction artifact must not be empty")
 
     identity = {
         field: _single_artifact_field(frame, field)
         for field in ("model_name", "model_version", "dataset_version", "fold_index", "split")
+    }
+    horizon_targets = {
+        int(name.removeprefix("target_").removesuffix("s")): np.asarray(
+            full_frame[name].to_numpy(), dtype=np.float64
+        )
+        for name in full_frame.columns
+        if name.startswith("target_") and name.endswith("s")
     }
     metadata = tuple(
         SampleMeta(
@@ -213,6 +224,7 @@ def load_prediction_artifact(path: str) -> PredictionArtifact:
         dataset_version=str(identity["dataset_version"]),
         fold_index=cast(int, identity["fold_index"]),
         split=str(identity["split"]),
+        targets_by_horizon=horizon_targets,
     )
 
 

@@ -27,7 +27,8 @@ def _metadata() -> DatasetPackageMetadata:
     return DatasetPackageMetadata(
         dataset_id=compute_dataset_id(**identity),
         feature_columns=("ASKp1", "BIDp1"),
-        target_column="Target_60s_log",
+        target_columns=("Target_60s_log",),
+        labels=(60,),
         feature_dtype="float32",
         target_dtype="float32",
         snapshot_interval_seconds=3,
@@ -135,6 +136,11 @@ def test_metadata_rejects_identity_mismatch() -> None:
     value["dataset_id"] = "wrong"
 
     with pytest.raises(ValueError, match="does not match"):
+        DatasetPackageMetadata.from_dict(value)
+    value = _metadata().to_dict()
+    value["labels"] = [60, 120]
+    value["target_columns"] = ["Target_120s_log", "Target_60s_log"]
+    with pytest.raises(ValueError, match="target_columns must match"):
         DatasetPackageMetadata.from_dict(value)
 
 

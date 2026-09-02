@@ -47,6 +47,7 @@ def load_data_config(config_path: str) -> DataBuildConfig:
     _tuple_field(sessions, "afternoon")
     features = _section(raw, "features")
     _tuple_field(features, "derived_features")
+    target = _section(raw, "target")
     split = _section(raw, "split")
     for name in ("train_dates", "validation_dates", "test_dates"):
         _tuple_field(split, name, allow_none=True)
@@ -55,7 +56,7 @@ def load_data_config(config_path: str) -> DataBuildConfig:
             task=TaskConfig(**_section(raw, "task")),
             data=DataConfig(**_section(raw, "data")),
             cleaning=CleaningConfig(**_section(raw, "cleaning")),
-            target=TargetConfig(**_section(raw, "target")),
+            target=TargetConfig(**target),
             sessions=SessionConfig(**sessions),
             window=WindowConfig(**_section(raw, "window")),
             features=FeatureConfig(**features),
@@ -161,8 +162,7 @@ def _validate_data_config(config: DataBuildConfig) -> None:
     positive = {
         "data.levels": config.data.levels,
         "data.snapshot_interval_seconds": config.data.snapshot_interval_seconds,
-        "cleaning.max_ffill_gap_seconds": config.cleaning.max_ffill_gap_seconds,
-        "target.horizon_seconds": config.target.horizon_seconds,
+        "target.label_count": config.target.target_count,
         "window.history_snapshots": config.window.history_snapshots,
     }
     invalid = [name for name, value in positive.items() if not isinstance(value, int) or value <= 0]
@@ -181,8 +181,10 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("loader.batch_size and training.epochs must be > 0")
     if isinstance(config.seed, bool) or not isinstance(config.seed, int) or not 0 <= config.seed < 2**32:
         raise ValueError("seed must be an integer in [0, 2**32)")
+    if config.model.name.strip() == "":
+        raise ValueError("model.name must not be empty")
     if config.model.output_dim != 1:
-        raise ValueError("model.output_dim must be 1 for regression")
+        raise ValueError("model.output_dim must be 1 for scalar model contract")
     if config.training.monitor_mode not in {"min", "max"}:
         raise ValueError("training.monitor_mode must be 'min' or 'max'")
     if len(config.training.betas) != 2 or any(

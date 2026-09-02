@@ -55,11 +55,27 @@ class CleaningConfig:
 
 @dataclass(frozen=True)
 class TargetConfig:
-    """标签定义（§7）：60 秒中间价对数收益，future 匹配容差 3 秒（§7.2）。"""
+    """多 horizon 收益标签配置。"""
 
-    type: str = "log_mid_return"  # log_mid_return | simple_mid_return
-    horizon_seconds: int = 60
+    type: str = "log_mid_return"
+    label: list[int] = field(default_factory=lambda: [60, 120, 300, 600])
     tolerance_seconds: int = 3
+
+    def __post_init__(self) -> None:
+        labels = list(self.label)
+        if not labels or len(set(labels)) != len(labels):
+            raise ValueError("label must be non-empty and unique")
+        if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in labels):
+            raise ValueError("label must contain positive integers")
+        if self.tolerance_seconds < 0:
+            raise ValueError("tolerance_seconds must be >= 0")
+        if any(self.tolerance_seconds >= value for value in labels):
+            raise ValueError("tolerance_seconds must be smaller than label values")
+        object.__setattr__(self, "label", labels)
+
+    @property
+    def target_count(self) -> int:
+        return len(self.label)
 
 
 @dataclass(frozen=True)
@@ -117,7 +133,7 @@ class LoaderConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """模型（§18）：统一 ``forward(x) -> [B, 1]``；MVP 仅 CNN1 / DeepLOB。"""
+    """模型（§18）：统一单 target 输出；多任务输出由数据包 labels 决定。"""
 
     name: str = "cnn1"
     output_dim: int = 1
@@ -262,9 +278,9 @@ class DataBuildConfig:
         return self.task.ticker
 
     @property
-    def target_column(self) -> str:
+    def target_columns(self) -> tuple[str, ...]:
         short = {"log_mid_return": "log", "simple_mid_return": "simple"}[self.target.type]
-        return f"Target_{self.target.horizon_seconds}s_{short}"
+        return tuple(f"Target_{label}s_{short}" for label in self.target.label)
 
 
 @dataclass(frozen=True)

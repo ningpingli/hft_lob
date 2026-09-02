@@ -34,8 +34,8 @@ data:
 cleaning:
   max_ffill_gap_seconds: 6
 target:
+  label: [60, 120, 300, 600]
   type: log_mid_return
-  horizon_seconds: 60
   tolerance_seconds: 3
 sessions:
   morning: ["09:30:00", "11:30:00"]
