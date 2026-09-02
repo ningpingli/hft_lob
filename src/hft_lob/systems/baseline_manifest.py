@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
@@ -181,6 +181,29 @@ def validate_default_manifest(
     fold_indices: tuple[int, ...],
 ) -> BaselineManifest:
     """Validate the manifest, file hashes, identities and evaluation contents."""
+    manifest, _ = _validate_and_collect_reports(package, fold_indices=fold_indices)
+    return manifest
+
+
+def load_validated_reference_reports(
+    package: DatasetPackage,
+    *,
+    fold_indices: tuple[int, ...],
+) -> tuple[BaselineManifest, dict[tuple[int, str], EvaluationReport]]:
+    """Validate the manifest once and return every persisted reference report.
+
+    The returned mapping is keyed by ``(fold_index, baseline_name)`` and can be
+    passed to :func:`build_baseline_comparison` to avoid re-reading and
+    re-verifying the reference artifacts.
+    """
+    return _validate_and_collect_reports(package, fold_indices=fold_indices)
+
+
+def _validate_and_collect_reports(
+    package: DatasetPackage,
+    *,
+    fold_indices: tuple[int, ...],
+) -> tuple[BaselineManifest, dict[tuple[int, str], EvaluationReport]]:
     manifest = load_default_manifest(package.metadata.dataset_id)
     if manifest.dataset_id != package.metadata.dataset_id:
         raise ValueError("baseline manifest dataset_id does not match the dataset package")
@@ -189,6 +212,7 @@ def validate_default_manifest(
         raise ValueError(f"baseline manifest is missing requested folds: {missing_folds}")
 
     root = baseline_space(manifest.dataset_id).resolve()
+    reports: dict[tuple[int, str], EvaluationReport] = {}
     for reference in manifest.artifacts:
         prediction_path = _reference_path(root, reference.predictions_path)
         evaluation_path = _reference_path(root, reference.evaluation_path)
@@ -210,12 +234,14 @@ def validate_default_manifest(
         )
         if not _reports_equal(persisted_report, expected_report):
             raise ValueError(f"baseline evaluation does not match predictions: {evaluation_path}")
-    return manifest
+        reports[(reference.fold_index, reference.baseline_name)] = persisted_report
+    return manifest, reports
 
 
 def build_baseline_comparison(
     model_fold_results: Sequence[FoldEvaluationResult],
     manifest: BaselineManifest,
+    reference_reports: Mapping[tuple[int, str], EvaluationReport] | None = None,
 ) -> dict[str, dict[str, object]]:
     """Compare the four scalar model metrics with each registered baseline by fold."""
     if not model_fold_results:
@@ -233,8 +259,17 @@ def build_baseline_comparison(
         deltas: dict[str, list[float]] = {metric: [] for metric in _COMPARISON_METRICS}
         wins: dict[str, list[bool]] = {metric: [] for metric in _COMPARISON_METRICS}
         for fold_result in model_fold_results:
-            reference = references[(fold_result.fold_index, baseline_name)]
-            baseline_report = _load_reference_report(manifest.dataset_id, reference)
+            key = (fold_result.fold_index, baseline_name)
+            if reference_reports is not None:
+                try:
+                    baseline_report = reference_reports[key]
+                except KeyError as exc:
+                    raise ValueError(
+                        "reference_reports must cover every manifest fold and baseline"
+                    ) from exc
+            else:
+                reference = references[key]
+                baseline_report = _load_reference_report(manifest.dataset_id, reference)
             model_metrics = _report_metrics(fold_result.evaluation)
             baseline_metrics = _report_metrics(baseline_report)
             for metric in _COMPARISON_METRICS:
@@ -244,7 +279,8 @@ def build_baseline_comparison(
                     deltas[metric].append(model_value - baseline_value)
                     wins[metric].append(_is_better(metric, model_value, baseline_value))
         comparison[baseline_name] = {
-            "expected_fold_count": len(model_fold_results),
+            "model_fold_count": len(model_fold_results),
+            "manifest_fold_count": len(manifest.fold_indices),
             "matched_fold_count": {metric: len(values) for metric, values in deltas.items()},
             "fold_delta": {
                 metric: float(np.mean(values)) if values else float("nan")

@@ -22,6 +22,7 @@ from hft_lob.systems.baseline_manifest import (
     build_baseline_comparison,
     default_manifest_path,
     load_default_manifest,
+    load_validated_reference_reports,
     save_default_manifest,
     validate_default_manifest,
 )
@@ -61,7 +62,8 @@ def test_baseline_comparison_covers_four_scalar_metrics(
         manifest,
     )["zero"]
 
-    assert result["expected_fold_count"] == 1
+    assert result["model_fold_count"] == 1
+    assert result["manifest_fold_count"] == 1
     assert result["matched_fold_count"] == {
         "mse": 1,
         "mae": 1,
@@ -73,6 +75,70 @@ def test_baseline_comparison_covers_four_scalar_metrics(
     assert result["fold_delta"]["mean_daily_ic"] > 0
     assert result["fold_delta"]["positive_ic_day_ratio"] > 0
     assert set(result["fold_win_ratio"].values()) == {1.0}
+
+
+def test_load_validated_reference_reports_collects_every_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package, _ = _published_manifest(tmp_path, monkeypatch)
+
+    manifest, reports = load_validated_reference_reports(package, fold_indices=(1,))
+
+    assert set(reports) == {(1, "zero")}
+    assert reports[(1, "zero")].sample_count == 4
+    assert reports[(1, "zero")].overall == pytest.approx({"mse": 0.5625, "mae": 0.625})
+    assert manifest.schema_version == BASELINE_MANIFEST_SCHEMA_VERSION
+
+
+def test_baseline_comparison_reuses_prevalidated_reports(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package, manifest = _published_manifest(tmp_path, monkeypatch)
+    _, reports = load_validated_reference_reports(package, fold_indices=(1,))
+
+    def _forbidden(*args: object, **kwargs: object) -> object:
+        raise AssertionError("reference reports must be reused, not reloaded")
+
+    monkeypatch.setattr(
+        "hft_lob.systems.baseline_manifest._load_reference_report", _forbidden
+    )
+    model_report = build_evaluation_report(
+        _artifact(_metadata(), model_name="model", predictions=np.array([1.0, 2.0, 1.0, 2.0])),
+        EvaluationConfig(prediction_bins=2),
+    )
+
+    result = build_baseline_comparison(
+        (SimpleNamespace(fold_index=1, evaluation=model_report),),
+        manifest,
+        reference_reports=reports,
+    )["zero"]
+
+    assert result["matched_fold_count"]["mse"] == 1
+    assert result["fold_win_ratio"]["mse"] == 1.0
+
+
+def test_baseline_comparison_rejects_incomplete_reference_reports() -> None:
+    manifest = BaselineManifest(
+        dataset_id="dataset",
+        experiment_id="baseline",
+        config_hash=_CONFIG_HASH,
+        fold_indices=(1,),
+        baseline_names=("zero",),
+        artifacts=(_reference("predictions.parquet", "evaluation.yaml"),),
+    )
+    model_report = build_evaluation_report(
+        _artifact(_metadata(), model_name="model", predictions=np.array([1.0, 2.0, 1.0, 2.0])),
+        EvaluationConfig(prediction_bins=2),
+    )
+
+    with pytest.raises(ValueError, match="must cover every manifest fold and baseline"):
+        build_baseline_comparison(
+            (SimpleNamespace(fold_index=1, evaluation=model_report),),
+            manifest,
+            reference_reports={},
+        )
 
 
 def test_manifest_rejects_old_schema_and_duplicate_references() -> None:
