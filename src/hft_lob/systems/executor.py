@@ -281,7 +281,13 @@ def build_test_trainer(
     accelerator: str = "auto",
     devices: int | list[int] | str = 1,
 ) -> L.Trainer:
-    """Build a deterministic inference-only Trainer without training callbacks."""
+    """构建独立评测（``hft_lob test`` / ``run_standalone_test``）用的纯推理 Trainer。
+
+    评测需要调用 ``trainer.test(model, datamodule, ckpt_path=...)`` 严格加载已保存的
+    Lightning checkpoint 并执行 test split。与训练用的 ``build_trainer`` 不同，评测
+    不附加 ModelCheckpoint / EarlyStopping 回调、不保存 checkpoint
+    （``enable_checkpointing=False``）、不记录日志，因此这里不要求 epochs/patience。
+    """
     if not log_dir.strip():
         raise ValueError("log_dir must not be empty")
     return L.Trainer(
