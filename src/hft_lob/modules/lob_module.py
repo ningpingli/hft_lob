@@ -78,6 +78,12 @@ class LOBLightningModule(L.LightningModule):
             )
         return predictions
 
+
+    def _compute_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        loss = self.loss_fn(predictions, targets)
+        if not isinstance(loss, torch.Tensor):
+            raise TypeError("loss function must return a torch.Tensor")
+        return loss
     def transfer_batch_to_device(
         self,
         batch: LOBBatch,
@@ -91,7 +97,7 @@ class LOBLightningModule(L.LightningModule):
         )
     def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)
-        loss = self.loss_fn(predictions, targets)
+        loss = self._compute_loss(predictions, targets)
         self.log(
             "train/loss",
             loss,
@@ -104,7 +110,7 @@ class LOBLightningModule(L.LightningModule):
 
     def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)
-        loss = self.loss_fn(predictions, targets)
+        loss = self._compute_loss(predictions, targets)
         self._validation_predictions.append(predictions.detach().cpu())
         self._validation_targets.append(targets.detach().cpu())
         self.log(
@@ -142,7 +148,7 @@ class LOBLightningModule(L.LightningModule):
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)
-        loss = self.loss_fn(predictions, targets)
+        loss = self._compute_loss(predictions, targets)
         self._test_predictions.append(predictions.detach().cpu())
         self._test_targets.append(targets.detach().cpu())
         self._test_metadata.extend(batch.metadata)

@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from hft_lob.configs import BaselineRunConfig, load_baseline_config
-from hft_lob.data_pipeline.dataset_validator import (
+from hft_lob.data_pipeline.writer import (
     load_dataset_package,
     stable_config_hash,
 )

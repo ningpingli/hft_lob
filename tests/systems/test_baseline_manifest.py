@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.data_pipeline.dataset_validator import (
+from hft_lob.data_pipeline.writer import (
     DatasetPackage,
     DatasetPackageMetadata,
     compute_dataset_id,

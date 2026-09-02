@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from hft_lob.data_pipeline.dataset_validator import (
+from hft_lob.data_pipeline.writer import (
     FOLD_INDEX_SCHEMA,
     DatasetPackageMetadata,
     compute_dataset_id,
