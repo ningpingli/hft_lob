@@ -8,7 +8,6 @@ loader:
 
 model:
   name: lobtransformer
-  output_dim: 1
 
 
 training:

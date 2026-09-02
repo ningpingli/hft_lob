@@ -14,6 +14,7 @@ from hft_lob.metrics.metrics import (
     METRIC_NAMES,
     DailyICRecord,
     EvaluationReport,
+    LabelEvaluation,
     PredictionBinRecord,
     mean_daily_ic,
     positive_ic_day_ratio,
@@ -21,6 +22,7 @@ from hft_lob.metrics.metrics import (
 from hft_lob.utils._yaml_io import atomic_dump_yaml
 
 _REPORT_FIELDS = {
+    "labels",
     "sample_count",
     "valid_sample_count",
     "valid_day_count",
@@ -29,6 +31,7 @@ _REPORT_FIELDS = {
     "mean_daily_ic",
     "positive_ic_day_ratio",
     "prediction_bins",
+    "per_label",
 }
 
 
@@ -60,31 +63,79 @@ def load_evaluation_report(path: str | Path) -> EvaluationReport:
         raise ValueError(f"invalid evaluation report: {source}") from exc
     if not isinstance(value, dict) or set(value) != _REPORT_FIELDS:
         raise ValueError("evaluation report has an invalid root schema")
-
+    labels_raw = value["labels"]
+    if (
+        not isinstance(labels_raw, list)
+        or not labels_raw
+        or any(not isinstance(label, int) or isinstance(label, bool) or label <= 0 for label in labels_raw)
+        or len(set(labels_raw)) != len(labels_raw)
+    ):
+        raise ValueError("evaluation labels must be a non-empty unique positive list")
     overall_raw = value["overall"]
     daily_raw = value["daily_ic"]
     bins_raw = value["prediction_bins"]
+    per_label_raw = value["per_label"]
     if not isinstance(overall_raw, dict) or set(overall_raw) != set(METRIC_NAMES):
         raise ValueError("evaluation overall metrics must be exactly mse and mae")
     if not isinstance(daily_raw, list) or not isinstance(bins_raw, list):
         raise ValueError("evaluation daily_ic and prediction_bins must be lists")
+    if not isinstance(per_label_raw, dict):
+        raise ValueError("evaluation per_label must be a mapping")
 
+    per_label = {
+        int(label): _label_report(item, expected_label=int(label))
+        for label, item in per_label_raw.items()
+    }
+    if set(per_label) != set(labels_raw):
+        raise ValueError("evaluation per_label keys must match labels")
     report = EvaluationReport(
+        labels=tuple(labels_raw),
         sample_count=_integer(value["sample_count"], field="sample_count", minimum=1),
-        valid_sample_count=_integer(
-            value["valid_sample_count"], field="valid_sample_count", minimum=0
-        ),
+        valid_sample_count=_integer(value["valid_sample_count"], field="valid_sample_count", minimum=0),
         valid_day_count=_integer(value["valid_day_count"], field="valid_day_count", minimum=0),
         overall={name: _number(overall_raw[name], field=name) for name in METRIC_NAMES},
         daily_ic=tuple(_daily_record(item) for item in daily_raw),
         mean_daily_ic=_number(value["mean_daily_ic"], field="mean_daily_ic"),
-        positive_ic_day_ratio=_number(
-            value["positive_ic_day_ratio"], field="positive_ic_day_ratio"
-        ),
+        positive_ic_day_ratio=_number(value["positive_ic_day_ratio"], field="positive_ic_day_ratio"),
         prediction_bins=tuple(_prediction_bin(item) for item in bins_raw),
+        per_label=per_label,
     )
     _validate_report(report)
     return report
+
+
+def _label_report(value: object, *, expected_label: int) -> LabelEvaluation:
+    if not isinstance(value, dict):
+        raise ValueError("per_label entries must be mappings")
+    required = {
+        "label",
+        "valid_sample_count",
+        "valid_day_count",
+        "overall",
+        "daily_ic",
+        "mean_daily_ic",
+        "positive_ic_day_ratio",
+        "prediction_bins",
+    }
+    if set(value) != required or value["label"] != expected_label:
+        raise ValueError("per_label entry has an invalid schema")
+    overall = value["overall"]
+    if not isinstance(overall, dict) or set(overall) != set(METRIC_NAMES):
+        raise ValueError("per_label overall metrics must be exactly mse and mae")
+    daily = value["daily_ic"]
+    bins = value["prediction_bins"]
+    if not isinstance(daily, list) or not isinstance(bins, list):
+        raise ValueError("per_label daily_ic and prediction_bins must be lists")
+    return LabelEvaluation(
+        label=expected_label,
+        valid_sample_count=_integer(value["valid_sample_count"], field="label sample_count", minimum=0),
+        valid_day_count=_integer(value["valid_day_count"], field="label day_count", minimum=0),
+        overall={name: _number(overall[name], field=name) for name in METRIC_NAMES},
+        daily_ic=tuple(_daily_record(item) for item in daily),
+        mean_daily_ic=_number(value["mean_daily_ic"], field="label mean_daily_ic"),
+        positive_ic_day_ratio=_number(value["positive_ic_day_ratio"], field="label positive_ic_day_ratio"),
+        prediction_bins=tuple(_prediction_bin(item) for item in bins),
+    )
 
 
 def plot_daily_ic_curve(report: EvaluationReport, output_path: str | Path) -> Path:
@@ -198,8 +249,8 @@ def _prediction_bin(value: object) -> PredictionBinRecord:
 
 
 def _validate_report(report: EvaluationReport) -> None:
-    if report.valid_sample_count > report.sample_count:
-        raise ValueError("valid_sample_count must not exceed sample_count")
+    if report.valid_sample_count > report.sample_count * len(report.labels):
+        raise ValueError("valid_sample_count exceeds total label cells")
     dates = [record.trade_date for record in report.daily_ic]
     if not dates or dates != sorted(dates) or len(set(dates)) != len(dates):
         raise ValueError("daily_ic dates must be non-empty, unique and chronological")

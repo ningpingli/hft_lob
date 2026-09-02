@@ -80,11 +80,14 @@ class DefaultWalkForwardExecutor:
                 config,
                 feature_columns=metadata.feature_columns,
                 history_snapshots=metadata.history_snapshots,
+                target_count=len(metadata.labels),
             ),
             config,
             dataset_version=metadata.dataset_id,
             model_version=model_version,
             fold_index=fold_index,
+            target_count=len(metadata.labels),
+            labels=metadata.labels,
         )
         run_training(trainer, lightning_module, datamodule)
         checkpoint_path = checkpoint.best_model_path
@@ -162,10 +165,12 @@ class DefaultWalkForwardExecutor:
                 config,
                 feature_columns=metadata.feature_columns,
                 history_snapshots=metadata.history_snapshots,
+                target_count=len(metadata.labels),
             ),
             model_version=model_version,
             dataset_version=metadata.dataset_id,
             fold_index=fold_index,
+            labels=metadata.labels,
         )
         runner.fit(lambda: (cast(LOBBatch, batch) for batch in datamodule.train_dataloader()))
         datamodule.teardown("fit")

@@ -74,11 +74,14 @@ def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
             bundle.config,
             feature_columns=package.metadata.feature_columns,
             history_snapshots=package.metadata.history_snapshots,
+            target_count=len(package.metadata.labels),
         ),
         bundle.config,
         dataset_version=package.metadata.dataset_id,
         model_version=bundle.metadata.model_version,
         fold_index=fold_index,
+        target_count=len(package.metadata.labels),
+        labels=package.metadata.labels,
     )
     trainer = L.Trainer(
         default_root_dir=str(output_dir),

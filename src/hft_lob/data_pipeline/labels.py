@@ -1,4 +1,4 @@
-"""多 horizon 收益标签生成。"""
+"""按配置 labels 生成多标签收益列。"""
 
 from __future__ import annotations
 
@@ -13,24 +13,23 @@ _LABEL_TYPE_SHORT: dict[str, str] = {"log_mid_return": "log", "simple_mid_return
 
 
 def label_columns(config: TargetConfig) -> tuple[str, ...]:
-    """Return all configured target column names in label order."""
-    return tuple(horizon_label_column(config, label) for label in config.label)
+    """Return target column names in the configured label order."""
+    return tuple(target_column(config, label) for label in config.labels)
 
 
-def horizon_label_column(config: TargetConfig, label: int) -> str:
-    """Return the configured target column name for one label."""
-
+def target_column(config: TargetConfig, label: int) -> str:
+    """Return the selected target column name for one label."""
     try:
         short = _LABEL_TYPE_SHORT[config.type]
     except KeyError as exc:
         raise ValueError(f"unsupported target type: {config.type!r}") from exc
-    if label not in config.label:
+    if label not in config.labels:
         raise ValueError(f"label is not configured: {label}")
     return f"Target_{label}s_{short}"
 
 
 class LabelTransformer:
-    """Append one target and validity set for every configured label."""
+    """Append one selected target and validity mask for every configured label."""
 
     def __init__(self, config: TargetConfig) -> None:
         if config.type not in _LABEL_TYPE_SHORT:
@@ -38,7 +37,7 @@ class LabelTransformer:
         self.config = config
 
     def transform(self, segment: SessionSegment) -> SessionSegment:
-        """Add future prices, returns, and per-label validity columns."""
+        """Add selected target and per-label validity columns."""
         frame = segment.frame
         required = {"trade_date", "session_id", "timestamp", "mid_price", "book_valid"}
         missing = sorted(required.difference(frame.columns))
@@ -64,11 +63,16 @@ class LabelTransformer:
             & (pl.col("mid_price") > 0)
         )
         result = frame
-        for label in self.config.label:
+        target_expression = (
+            lambda future_mid: (future_mid / pl.col("mid_price")).log()
+            if self.config.type == "log_mid_return"
+            else future_mid / pl.col("mid_price") - 1.0
+        )
+        for label in self.config.labels:
             suffix = f"{label}s"
-            future_timestamp = f"future_timestamp_{suffix}"
-            future_mid = f"future_mid_{suffix}"
-            future_book_valid = f"future_book_valid_{suffix}"
+            future_timestamp = f"_future_timestamp_{suffix}"
+            future_mid = f"_future_mid_{suffix}"
+            future_book_valid = f"_future_book_valid_{suffix}"
             target_timestamp = f"_target_timestamp_{suffix}"
             candidates = frame.select(
                 pl.col("timestamp").alias(future_timestamp),
@@ -81,9 +85,7 @@ class LabelTransformer:
                 & (pl.col(future_mid) > 0)
             ).sort(future_timestamp)
             result = result.with_columns(
-                (
-                    pl.col("timestamp") + pl.lit(timedelta(seconds=label))
-                ).alias(target_timestamp)
+                (pl.col("timestamp") + pl.lit(timedelta(seconds=label))).alias(target_timestamp)
             ).join_asof(
                 candidates,
                 left_on=target_timestamp,
@@ -91,9 +93,7 @@ class LabelTransformer:
                 strategy="nearest",
                 tolerance=f"{self.config.tolerance_seconds}s",
             )
-            valid_name = f"target_valid_{suffix}"
-            log_name = f"Target_{suffix}_log"
-            simple_name = f"Target_{suffix}_simple"
+            target_name = target_column(self.config, label)
             future_valid = (
                 pl.col(future_book_valid).fill_null(False)
                 & pl.col(future_mid).is_not_null()
@@ -101,26 +101,13 @@ class LabelTransformer:
                 & (pl.col(future_mid) > 0)
                 & pl.col(future_timestamp).is_not_null()
             )
-            result = result.with_columns((current_valid & future_valid).alias(valid_name))
             result = result.with_columns(
-                pl.when(pl.col(valid_name))
-                .then((pl.col(future_mid) / pl.col("mid_price")).log())
+                pl.when(current_valid & future_valid)
+                .then(target_expression(pl.col(future_mid)))
                 .otherwise(None)
                 .cast(pl.Float64)
-                .alias(log_name),
-                pl.when(pl.col(valid_name))
-                .then(pl.col(future_mid) / pl.col("mid_price") - 1.0)
-                .otherwise(None)
-                .cast(pl.Float64)
-                .alias(simple_name),
-            ).drop(target_timestamp, future_book_valid)
-
-        first_suffix = f"{self.config.label[0]}s"
-        result = result.with_columns(
-            pl.col(f"future_timestamp_{first_suffix}").alias("future_timestamp"),
-            pl.col(f"future_mid_{first_suffix}").alias("future_mid"),
-            pl.col(f"target_valid_{first_suffix}").alias("target_valid"),
-        )
+                .alias(target_name),
+            ).drop([target_timestamp, future_timestamp, future_mid, future_book_valid])
         return SessionSegment(
             trade_date=segment.trade_date,
             session_id=segment.session_id,
@@ -145,42 +132,13 @@ class LabelTransformer:
 
 
 def _output_columns(config: TargetConfig) -> list[str]:
-    columns: list[str] = []
-    for label in config.label:
-        suffix = f"{label}s"
-        columns.extend(
-            [
-                f"future_timestamp_{suffix}",
-                f"future_mid_{suffix}",
-                f"Target_{suffix}_log",
-                f"Target_{suffix}_simple",
-                f"target_valid_{suffix}",
-                f"future_book_valid_{suffix}",
-                f"_target_timestamp_{suffix}",
-            ]
-        )
-    columns.extend(("future_timestamp", "future_mid", "target_valid"))
-    return columns
+    return [target_column(config, label) for label in config.labels]
 
 
 def _empty_output_frame(frame: pl.DataFrame, config: TargetConfig) -> pl.DataFrame:
-    expressions: list[pl.Expr] = []
-    for label in config.label:
-        suffix = f"{label}s"
-        expressions.extend(
-            [
-                pl.lit(None).cast(pl.Datetime("us")).alias(f"future_timestamp_{suffix}"),
-                pl.lit(None).cast(pl.Float64).alias(f"future_mid_{suffix}"),
-                pl.lit(None).cast(pl.Float64).alias(f"Target_{suffix}_log"),
-                pl.lit(None).cast(pl.Float64).alias(f"Target_{suffix}_simple"),
-                pl.lit(False).alias(f"target_valid_{suffix}"),
-            ]
-        )
-    expressions.extend(
+    return frame.with_columns(
         [
-            pl.lit(None).cast(pl.Datetime("us")).alias("future_timestamp"),
-            pl.lit(None).cast(pl.Float64).alias("future_mid"),
-            pl.lit(False).alias("target_valid"),
+            pl.lit(None).cast(pl.Float64).alias(target_column(config, label))
+            for label in config.labels
         ]
     )
-    return frame.with_columns(expressions)

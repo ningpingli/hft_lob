@@ -35,7 +35,6 @@ def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
                 datetime(2026, 1, 5, 9, 30) + timedelta(seconds=offset + index)
             ).isoformat(),
             mid_t=10.0,
-            future_mid=10.1,
             bid1=9.9,
             ask1=10.1,
             spread=0.2,
@@ -43,8 +42,9 @@ def _artifact(*, offset: int = 0, split: str = "test") -> PredictionArtifact:
         for index in range(2)
     )
     return PredictionArtifact(
-        predictions=np.asarray([0.1 + offset, 0.2 + offset]),
-        targets=np.asarray([0.2 + offset, 0.3 + offset]),
+        predictions=np.asarray([[0.1 + offset], [0.2 + offset]]),
+        targets=np.asarray([[0.2 + offset], [0.3 + offset]]),
+        labels=(60,),
         metadata=metadata,
         model_name="cnn1",
         model_version="v1",
@@ -110,7 +110,7 @@ def test_run_test_returns_module_artifact() -> None:
         "best.ckpt",  # type: ignore[arg-type]
     )
 
-    assert artifact.predictions.shape == (2,)
+    assert artifact.predictions.shape == (2, 1)
     assert trainer.calls[0][0] == "test"
 
 

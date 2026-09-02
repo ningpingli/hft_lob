@@ -71,6 +71,16 @@ def test_forward_all_models(name: str, sample: torch.Tensor) -> None:
     assert out.shape == (2, 1)
 
 
+
+def test_registered_model_output_width_follows_label_count(sample: torch.Tensor) -> None:
+    model = build_model(
+        _make_config("cnn1"),
+        feature_columns=[f"f{i}" for i in range(_FEATURES)],
+        history_snapshots=_HISTORY,
+        target_count=3,
+    )
+    assert model(sample).shape == (2, 3)
+
 @pytest.mark.parametrize("model_type", (CNN1, CNN2))
 def test_cnn_output_dimension_is_not_configurable(model_type: type[torch.nn.Module]) -> None:
     """分类时代的 num_classes 参数不能重新引入多列输出。"""

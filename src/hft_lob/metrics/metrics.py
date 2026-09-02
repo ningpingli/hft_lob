@@ -34,10 +34,10 @@ class PredictionBinRecord:
 
 
 @dataclass(frozen=True)
-class EvaluationReport:
-    """The complete scalar metrics and diagnostic-curve data for one fold."""
+class LabelEvaluation:
+    """One complete evaluation view for one configured label."""
 
-    sample_count: int
+    label: int
     valid_sample_count: int
     valid_day_count: int
     overall: dict[str, float]
@@ -46,6 +46,21 @@ class EvaluationReport:
     positive_ic_day_ratio: float
     prediction_bins: tuple[PredictionBinRecord, ...]
 
+
+@dataclass(frozen=True)
+class EvaluationReport:
+    """Aggregate metrics plus an independently computed report per label."""
+
+    labels: tuple[int, ...]
+    sample_count: int
+    valid_sample_count: int
+    valid_day_count: int
+    overall: dict[str, float]
+    daily_ic: tuple[DailyICRecord, ...]
+    mean_daily_ic: float
+    positive_ic_day_ratio: float
+    prediction_bins: tuple[PredictionBinRecord, ...]
+    per_label: dict[int, LabelEvaluation]
 
 def mse(preds: np.ndarray, targets: np.ndarray) -> float:
     """Mean squared error over finite prediction-target pairs."""
@@ -122,7 +137,6 @@ def prediction_quantile_bins(
     prediction, target = _valid_pairs(preds, targets)
     if prediction.size < n_bins:
         raise ValueError("valid sample count must be >= n_bins")
-
     order = np.argsort(prediction, kind="stable")
     groups = np.array_split(order, n_bins)
     return tuple(
@@ -137,33 +151,61 @@ def prediction_quantile_bins(
         for index, group in enumerate(groups, start=1)
     )
 
-
 def build_evaluation_report(
     artifact: PredictionArtifact,
     config: EvaluationConfig,
 ) -> EvaluationReport:
-    """Build the sole external evaluation report from a prediction artifact."""
-    predictions, targets = _paired_vectors(artifact.predictions, artifact.targets)
+    """Build aggregate and per-label reports from the prediction matrix."""
     trade_dates = np.asarray([meta.trade_date for meta in artifact.metadata])
-    valid_sample_count = int(
-        np.count_nonzero(np.isfinite(predictions) & np.isfinite(targets))
-    )
-    daily_ic = daily_ic_records(predictions, targets, trade_dates)
-    daily_ic_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
-    valid_day_count = int(np.count_nonzero(np.isfinite(daily_ic_values)))
+    per_label: dict[int, LabelEvaluation] = {}
+    flattened_predictions: list[np.ndarray] = []
+    flattened_targets: list[np.ndarray] = []
+    flattened_dates: list[np.ndarray] = []
+    for position, label in enumerate(artifact.labels):
+        predictions = artifact.predictions[:, position]
+        targets = artifact.targets[:, position]
+        dates = trade_dates
+        daily_ic = daily_ic_records(predictions, targets, dates)
+        daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
+        bins = prediction_quantile_bins(
+            predictions,
+            targets,
+            n_bins=config.prediction_bins,
+        )
+        per_label[label] = LabelEvaluation(
+            label=label,
+            valid_sample_count=int(predictions.size),
+            valid_day_count=int(np.count_nonzero(np.isfinite(daily_values))),
+            overall=evaluate(predictions, targets),
+            daily_ic=daily_ic,
+            mean_daily_ic=mean_daily_ic(daily_values),
+            positive_ic_day_ratio=positive_ic_day_ratio(daily_values),
+            prediction_bins=bins,
+        )
+        flattened_predictions.append(predictions)
+        flattened_targets.append(targets)
+        flattened_dates.append(dates)
+
+    predictions = np.concatenate(flattened_predictions)
+    targets = np.concatenate(flattened_targets)
+    dates = np.concatenate(flattened_dates)
+    daily_ic = daily_ic_records(predictions, targets, dates)
+    daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
     return EvaluationReport(
-        sample_count=int(predictions.size),
-        valid_sample_count=valid_sample_count,
-        valid_day_count=valid_day_count,
+        labels=artifact.labels,
+        sample_count=int(artifact.predictions.shape[0]),
+        valid_sample_count=int(predictions.size),
+        valid_day_count=int(np.count_nonzero(np.isfinite(daily_values))),
         overall=evaluate(predictions, targets),
         daily_ic=daily_ic,
-        mean_daily_ic=mean_daily_ic(daily_ic_values),
-        positive_ic_day_ratio=positive_ic_day_ratio(daily_ic_values),
+        mean_daily_ic=mean_daily_ic(daily_values),
+        positive_ic_day_ratio=positive_ic_day_ratio(daily_values),
         prediction_bins=prediction_quantile_bins(
             predictions,
             targets,
             n_bins=config.prediction_bins,
         ),
+        per_label=per_label,
     )
 
 

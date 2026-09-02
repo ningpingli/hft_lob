@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch
 
@@ -14,7 +14,6 @@ class SampleMeta:
     session_id: str
     anchor_timestamp: str
     mid_t: float
-    future_mid: float
     bid1: float
     ask1: float
     spread: float
@@ -25,4 +24,3 @@ class LOBBatch:
     features: torch.Tensor
     targets: torch.Tensor
     metadata: tuple[SampleMeta, ...]
-    targets_by_horizon: dict[int, torch.Tensor] = field(default_factory=dict)

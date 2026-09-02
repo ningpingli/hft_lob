@@ -39,3 +39,5 @@ def test_build_loss_rejects_unknown_name(name: str) -> None:
 def test_build_loss_rejects_non_positive_huber_delta(delta: float) -> None:
     with pytest.raises(ValueError, match="huber_delta must be > 0"):
         build_loss("huber", huber_delta=delta)
+
+

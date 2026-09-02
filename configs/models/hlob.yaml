@@ -9,7 +9,6 @@ loader:
 
 model:
   name: hlob
-  output_dim: 1
 
 
 training:

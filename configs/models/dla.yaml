@@ -8,7 +8,6 @@ loader:
 
 model:
   name: dla
-  output_dim: 1
 
 
 training:

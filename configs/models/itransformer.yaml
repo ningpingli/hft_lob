@@ -8,7 +8,6 @@ loader:
 
 model:
   name: itransformer
-  output_dim: 1
 
 
 training:

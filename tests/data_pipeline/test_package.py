@@ -45,8 +45,8 @@ def _write_package(tmp_path: Path) -> Path:
     root.mkdir(parents=True)
     np.save(root / "features.npy", np.ones((4, 2), dtype=np.float32))
     np.save(root / "targets.npy", np.ones((4, 1), dtype=np.float32))
-    np.save(root / "validity.npy", np.ones((4, 2), dtype=np.bool_))
-    np.save(root / "market.npy", np.ones((4, 4), dtype=np.float32))
+    np.save(root / "validity.npy", np.ones((4, 1), dtype=np.bool_))
+    np.save(root / "market.npy", np.ones((4, 3), dtype=np.float32))
     timestamps = [datetime(2020, 7, 16, 9, 30, 3 * index) for index in range(4)]
     pl.DataFrame(
         {

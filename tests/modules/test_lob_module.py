@@ -51,7 +51,6 @@ def _batch() -> LOBBatch:
             session_id="AM",
             anchor_timestamp=f"2026-01-05T09:30:0{index}",
             mid_t=10.0,
-            future_mid=10.1,
             bid1=9.9,
             ask1=10.1,
             spread=0.2,
@@ -103,8 +102,7 @@ def test_test_uses_complete_artifact_contract() -> None:
     module.test_step(batch, 0)
     module.on_test_epoch_end()
 
-    assert module.test_artifact is not None
-    assert module.test_artifact.predictions.shape == (2,)
+    assert module.test_artifact.predictions.shape == (2, 1)
     assert module.test_artifact.dataset_version == "dataset-v1"
     assert module.test_artifact.fold_index == 1
 

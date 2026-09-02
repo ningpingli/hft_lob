@@ -235,7 +235,7 @@ def _artifact(
     model_name: str,
     predictions: np.ndarray,
 ) -> PredictionArtifact:
-    targets = np.array([1.0, 2.0, 1.0, 2.0])
+    targets = np.array([[1.0], [2.0], [1.0], [2.0]])
     samples = tuple(
         SampleMeta(
             ticker=metadata.ticker,
@@ -245,7 +245,6 @@ def _artifact(
                 f"2026-01-0{5 if index < 2 else 6}T09:30:0{index % 2}"
             ),
             mid_t=10.0,
-            future_mid=10.1,
             bid1=9.9,
             ask1=10.1,
             spread=0.2,
@@ -253,8 +252,9 @@ def _artifact(
         for index in range(4)
     )
     return PredictionArtifact(
-        predictions=predictions,
+        predictions=np.asarray(predictions).reshape(4, 1),
         targets=targets,
+        labels=(60,),
         metadata=samples,
         model_name=model_name,
         model_version=f"baseline-1-fold1-{model_name}",

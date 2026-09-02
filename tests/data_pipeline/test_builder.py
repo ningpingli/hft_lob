@@ -24,6 +24,7 @@ from hft_lob.configs.experiment import (
     WindowConfig,
 )
 from hft_lob.data_pipeline.builder import build_dataset_package
+from hft_lob.data_pipeline.sample_compiler import _anchor_frame
 from hft_lob.data_pipeline.dataset_validator import open_dataset_package, validate_dataset_package
 from hft_lob.datasets.datamodule import LOBDataModule
 from hft_lob.datasets.lob_dataset import PrebuiltLOBDataset
@@ -36,7 +37,7 @@ def _config(tmp_path: Path) -> DataBuildConfig:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(label=[12, 6], tolerance_seconds=0),
+        target=TargetConfig(labels=[12, 6], tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(),
@@ -92,11 +93,10 @@ def test_build_dataset_package_is_complete_and_idempotent(
     index = pl.read_parquet(first / "folds" / "fold_001" / "train.parquet")
     assert index.height > 0
     dataset = PrebuiltLOBDataset(first, metadata, fold_index=1, split="train")
-    features, target, targets_by_horizon, sample = dataset[0]
+    features, targets, sample = dataset[0]
     assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
-    assert target.shape == (1,)
-    assert set(targets_by_horizon) == {12, 6}
-    assert target.item() == targets_by_horizon[12].item()
+    assert targets.shape == (2,)
+    assert tuple(metadata.labels) == (12, 6)
     assert sample.ticker == "TEST"
     module = LOBDataModule(
         open_dataset_package(first), fold_index=1, loader=LoaderConfig(), seed=42
@@ -111,3 +111,26 @@ def test_build_dataset_package_is_complete_and_idempotent(
     assert "dataset_build.progress" in caplog.text
     assert "dataset_build.validate_complete" in caplog.text
     assert "dataset_build.complete" in caplog.text
+
+
+def test_anchor_drops_sample_when_any_label_is_missing() -> None:
+    frame = pl.DataFrame(
+        {
+            "trade_date": ["2026-01-05"] * 4,
+            "session_id": ["AM"] * 4,
+            "timestamp": [
+                datetime(2026, 1, 5, 9, 30) + timedelta(seconds=index)
+                for index in range(4)
+            ],
+        },
+        schema_overrides={"timestamp": pl.Datetime("us")},
+    )
+    anchors = _anchor_frame(
+        frame,
+        np.ones(4, dtype=np.bool_),
+        np.asarray([True, False, True, True], dtype=np.bool_),
+        0,
+        2,
+    )
+
+    assert anchors.get_column("anchor_index").to_list() == [2, 3]

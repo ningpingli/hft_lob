@@ -129,14 +129,21 @@ class SampleCompiler:
         )
         frame = self.standardizer.transform_frame(transformed.frame)
         output_columns = [f"normalized__{name}" for name in self.feature_columns]
-        label_suffixes = tuple(f"{label}s" for label in self.config.target.label)
-        row_valid = _row_valid(frame, output_columns)
         target_columns = label_columns(self.config.target)
-        target_valid_columns = tuple(f"target_valid_{suffix}" for suffix in label_suffixes)
-        targets = np.asarray(frame.select(target_columns).to_numpy(), dtype=np.float32)
-        horizon_valid = np.asarray(
-            frame.select(target_valid_columns).to_numpy(), dtype=np.bool_
+        target_complete = np.asarray(
+            frame.select(
+                pl.all_horizontal(
+                    pl.col(name).is_not_null() & pl.col(name).is_finite()
+                    for name in target_columns
+                ).alias("target_complete")
+            ).get_column("target_complete"),
+            dtype=np.bool_,
         )
+        targets = np.asarray(
+            frame.select(pl.col(name).fill_null(0.0) for name in target_columns).to_numpy(),
+            dtype=np.float32,
+        )
+        row_valid = _row_valid(frame, output_columns)
         end = offset + frame.height
         rows = (
             frame.select("trade_date", "session_id", pl.col("timestamp"))
@@ -146,15 +153,16 @@ class SampleCompiler:
         return CompiledSession(
             features=np.asarray(frame.select(output_columns).to_numpy(), dtype=np.float32),
             targets=targets,
-            validity=np.column_stack((row_valid, horizon_valid)),
+            validity=row_valid[:, None],
             market=np.asarray(
-                frame.select("mid_price", "future_mid", "BIDp1", "ASKp1").to_numpy(),
+                frame.select("mid_price", "BIDp1", "ASKp1").to_numpy(),
                 dtype=np.float32,
             ),
             rows=rows,
             anchors=_anchor_frame(
                 frame,
                 row_valid,
+                target_complete,
                 offset,
                 self.config.window.history_snapshots,
             ),
@@ -176,23 +184,16 @@ def _row_valid(frame: pl.DataFrame, feature_columns: list[str]) -> np.ndarray:
 def _anchor_frame(
     frame: pl.DataFrame,
     row_valid: np.ndarray,
+    target_complete: np.ndarray,
     session_start: int,
     history_snapshots: int,
 ) -> pl.DataFrame:
-    target_valid = np.asarray(
-        frame.select(
-            (
-                pl.col("target_valid").fill_null(False)
-                & pl.col("future_mid").is_not_null()
-                & pl.col("future_mid").is_finite()
-            ).alias("valid")
-        ).get_column("valid"),
-        dtype=np.bool_,
-    )
+    if target_complete.ndim != 1 or target_complete.shape[0] != frame.height:
+        raise ValueError("target completeness must be a row-aligned vector")
     prefix = np.concatenate((np.zeros(1, dtype=np.int64), np.cumsum(row_valid)))
     local = np.arange(history_snapshots - 1, frame.height, dtype=np.int64)
     starts = local - history_snapshots + 1
-    keep = (prefix[local + 1] - prefix[starts] == history_snapshots) & target_valid[local]
+    keep = (prefix[local + 1] - prefix[starts] == history_snapshots) & target_complete[local]
     local = local[keep]
     return pl.DataFrame(
         {

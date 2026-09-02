@@ -14,6 +14,7 @@ class DLA(nn.Module):
         num_features: int | None = None,
         num_snapshots: int = 100,
         hidden_size: int = 128,
+        output_dim: int = 1,
     ) -> None:
         """初始化 DLA。
 
@@ -38,9 +39,8 @@ class DLA(nn.Module):
             batch_first=True,
             dropout=0.5,
         )
-
         self.W2 = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.W3 = nn.Linear(num_snapshots * hidden_size, 1)
+        self.W3 = nn.Linear(num_snapshots * hidden_size, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

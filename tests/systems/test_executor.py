@@ -75,8 +75,8 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     assert standalone.sample_count == result.evaluation.sample_count
     assert Path(standalone.evaluation_path).is_file()
     assert_frame_equal(
-        pl.read_parquet(standalone.predictions_path).select("prediction", "target"),
-        pl.read_parquet(result.predictions_path).select("prediction", "target"),
+        pl.read_parquet(standalone.predictions_path).select("prediction_6s", "target_6s"),
+        pl.read_parquet(result.predictions_path).select("prediction_6s", "target_6s"),
     )
 
 
@@ -117,7 +117,7 @@ def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(label=[6], tolerance_seconds=0),
+        target=TargetConfig(labels=[6, 12], tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=8),
         features=FeatureConfig(),

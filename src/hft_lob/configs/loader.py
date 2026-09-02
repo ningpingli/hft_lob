@@ -164,7 +164,7 @@ def _validate_data_config(config: DataBuildConfig) -> None:
     positive = {
         "data.levels": config.data.levels,
         "data.snapshot_interval_seconds": config.data.snapshot_interval_seconds,
-        "target.label_count": config.target.target_count,
+        "target.labels.count": config.target.target_count,
         "window.history_snapshots": config.window.history_snapshots,
     }
     invalid = [name for name, value in positive.items() if not isinstance(value, int) or value <= 0]
@@ -185,8 +185,6 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("seed must be an integer in [0, 2**32)")
     if config.model.name.strip() == "":
         raise ValueError("model.name must not be empty")
-    if config.model.output_dim != 1:
-        raise ValueError("model.output_dim must be 1 for scalar model contract")
     if config.training.monitor_metric not in {"val/mse", "val/mae"}:
         raise ValueError("training.monitor_metric must be 'val/mse' or 'val/mae'")
     if config.training.monitor_mode != "min":

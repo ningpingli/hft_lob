@@ -8,7 +8,6 @@ loader:
 
 model:
   name: binctabl
-  output_dim: 1
 
 
 training:

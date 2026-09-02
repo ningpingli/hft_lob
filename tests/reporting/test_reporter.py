@@ -6,26 +6,36 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hft_lob.metrics.metrics import DailyICRecord, EvaluationReport, PredictionBinRecord
+from hft_lob.metrics.metrics import (
+    DailyICRecord,
+    EvaluationReport,
+    LabelEvaluation,
+    PredictionBinRecord,
+)
 from hft_lob.reporting.reporter import load_evaluation_report, save_evaluation_outputs
 
 
 def _report() -> EvaluationReport:
+    daily_ic = (
+        DailyICRecord(trade_date="2025-01-01", sample_count=3, ic=0.4),
+        DailyICRecord(trade_date="2025-01-02", sample_count=3, ic=0.6),
+    )
+    bins = (
+        PredictionBinRecord(1, 0.0, 0.5, 3, -0.2, -0.1),
+        PredictionBinRecord(2, 0.5, 1.0, 3, 0.3, 0.2),
+    )
+    label = LabelEvaluation(60, 6, 2, {"mse": 0.1, "mae": 0.2}, daily_ic, 0.5, 1.0, bins)
     return EvaluationReport(
+        labels=(60,),
         sample_count=6,
         valid_sample_count=6,
         valid_day_count=2,
         overall={"mse": 0.1, "mae": 0.2},
-        daily_ic=(
-            DailyICRecord(trade_date="2025-01-01", sample_count=3, ic=0.4),
-            DailyICRecord(trade_date="2025-01-02", sample_count=3, ic=0.6),
-        ),
+        daily_ic=daily_ic,
         mean_daily_ic=0.5,
         positive_ic_day_ratio=1.0,
-        prediction_bins=(
-            PredictionBinRecord(1, 0.0, 0.5, 3, -0.2, -0.1),
-            PredictionBinRecord(2, 0.5, 1.0, 3, 0.3, 0.2),
-        ),
+        prediction_bins=bins,
+        per_label={60: label},
     )
 
 

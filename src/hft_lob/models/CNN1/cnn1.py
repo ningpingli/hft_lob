@@ -16,6 +16,7 @@ class CNN1(nn.Module):
         num_features: int = 20,
         history_length: int = 100,
         temp: int | None = None,
+        output_dim: int = 1,
     ) -> None:
         """初始化 CNN1。
 
@@ -67,7 +68,7 @@ class CNN1(nn.Module):
         self.relu5 = nn.LeakyReLU()
 
         # 全连接 2（回归读出头）
-        self.regression_head = nn.Linear(64, 1)
+        self.regression_head = nn.Linear(64, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

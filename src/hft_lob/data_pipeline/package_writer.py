@@ -88,9 +88,9 @@ class DatasetPackageWriter:
                 self.work_root / ".targets.bin", dtype=np.float32, width=target_count
             ),
             "validity": _ArrayAppender(
-                self.work_root / ".validity.bin", dtype=np.bool_, width=target_count + 1
+                self.work_root / ".validity.bin", dtype=np.bool_, width=1
             ),
-            "market": _ArrayAppender(self.work_root / ".market.bin", dtype=np.float32, width=4),
+            "market": _ArrayAppender(self.work_root / ".market.bin", dtype=np.float32, width=3),
         }
         self.row_writer: pq.ParquetWriter | None = None
         self.anchor_writer: pq.ParquetWriter | None = None

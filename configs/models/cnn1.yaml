@@ -8,7 +8,6 @@ loader:
 
 model:
   name: cnn1
-  output_dim: 1
 
 
 training:

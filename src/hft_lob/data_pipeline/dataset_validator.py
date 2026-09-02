@@ -250,8 +250,8 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
     expected_shapes = {
         "features.npy": (row_count, len(metadata.feature_columns)),
         "targets.npy": (row_count, len(metadata.labels)),
-        "validity.npy": (row_count, 1 + len(metadata.labels)),
-        "market.npy": (row_count, 4),
+        "validity.npy": (row_count, 1),
+        "market.npy": (row_count, 3),
     }
     arrays = {
         "features.npy": features,
@@ -266,6 +266,8 @@ def validate_dataset_package(package_dir: str | Path) -> DatasetPackageMetadata:
         raise ValueError("array dtype does not match dataset metadata")
     if validity.dtype != np.bool_ or market.dtype != np.float32:
         raise ValueError("validity.npy must be bool and market.npy must be float32")
+    if not np.isfinite(np.asarray(targets)).all():
+        raise ValueError("targets must contain only finite values")
 
     rows = pl.read_parquet(root / "rows.parquet")
     _validate_rows(rows, row_count)
@@ -375,7 +377,7 @@ def _validate_fold_references(
         raise ValueError("fold index contains an invalid global or session-local anchor")
     for anchor in frame.get_column("global_anchor_index"):
         start = anchor - history_snapshots + 1
-        if not validity[start : anchor + 1, 0].all() or not validity[anchor, 1]:
+        if not validity[start : anchor + 1, 0].all():
             raise ValueError("fold index references an invalid sample window")
     referenced = frame.join(
         rows,

@@ -17,6 +17,7 @@ class LobTransformer(nn.Module):
         d_model: int | None = None,
         nhead: int | None = None,
         num_layers: int | None = None,
+        output_dim: int = 1,
     ) -> None:
         """初始化 LobTransformer。
 
@@ -123,7 +124,7 @@ class LobTransformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers
         )
-        self.regression_head = nn.Linear(d_model, 1)
+        self.regression_head = nn.Linear(d_model, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

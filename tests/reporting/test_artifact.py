@@ -22,7 +22,6 @@ def _metadata() -> tuple[SampleMeta, ...]:
             session_id="AM",
             anchor_timestamp=f"2026-01-05T09:30:0{index}",
             mid_t=10.0 + index * 0.01,
-            future_mid=10.1 + index * 0.01,
             bid1=9.99 + index * 0.01,
             ask1=10.01 + index * 0.01,
             spread=0.02,
@@ -33,8 +32,9 @@ def _metadata() -> tuple[SampleMeta, ...]:
 
 def _artifact() -> PredictionArtifact:
     return PredictionArtifact(
-        predictions=np.asarray([[0.01], [0.02]], dtype=np.float32),
-        targets=np.asarray([0.015, 0.025]),
+        predictions=np.asarray([[0.01, 0.02], [0.02, 0.03]]),
+        targets=np.asarray([[0.015, 0.025], [0.025, 0.035]]),
+        labels=(60, 120),
         metadata=_metadata(),
         model_name="cnn1",
         model_version="model-v1",
@@ -44,95 +44,43 @@ def _artifact() -> PredictionArtifact:
     )
 
 
-def test_prediction_artifact_normalizes_vectors_and_freezes_arrays() -> None:
+def test_prediction_artifact_freezes_aligned_matrices() -> None:
     artifact = _artifact()
-
-    assert artifact.predictions.shape == (2,)
-    assert artifact.targets.shape == (2,)
-    assert artifact.predictions.dtype == np.float64
+    assert artifact.predictions.shape == (2, 2)
+    assert artifact.targets.shape == (2, 2)
+    assert artifact.labels == (60, 120)
     assert not artifact.predictions.flags.writeable
-    with pytest.raises(ValueError):
-        artifact.predictions[0] = 99.0
+    assert not artifact.targets.flags.writeable
 
 
-def test_save_prediction_artifact_writes_typed_complete_parquet(tmp_path: Path) -> None:
+def test_save_and_load_prediction_artifact_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "fold-2" / "predictions.parquet"
-
     output = save_prediction_artifact(artifact=_artifact(), path=str(path))
-    frame = pl.read_parquet(output)
-
-    assert Path(output) == path.resolve()
-    assert frame.height == 2
-    assert frame.columns == [
-        "model_name",
-        "model_version",
-        "dataset_version",
-        "fold_index",
-        "split",
-        "ticker",
-        "trade_date",
-        "session_id",
-        "anchor_timestamp",
-        "mid_t",
-        "future_mid",
-        "target",
-        "prediction",
-        "bid1",
-        "ask1",
-        "spread",
-    ]
-    assert frame.schema["anchor_timestamp"] == pl.Datetime("us")
-    assert frame.get_column("prediction").to_list() == pytest.approx([0.01, 0.02])
-    assert frame.get_column("fold_index").unique().to_list() == [2]
-
-
-def test_prediction_artifact_round_trips_horizon_targets(tmp_path: Path) -> None:
-    artifact = PredictionArtifact(
-        predictions=np.asarray([0.01, 0.02]),
-        targets=np.asarray([0.015, 0.025]),
-        targets_by_horizon={
-            60: np.asarray([0.015, 0.025]),
-            120: np.asarray([0.02, 0.03]),
-        },
-        metadata=_metadata(),
-        model_name="cnn1",
-        model_version="model-v1",
-        dataset_version="dataset-v1",
-        fold_index=2,
-        split="test",
-    )
-    path = tmp_path / "fold-2" / "predictions.parquet"
-
-    save_prediction_artifact(artifact=artifact, path=str(path))
+    assert Path(output).is_file()
+    columns = pl.read_parquet(path).columns
+    assert "target_60s" in columns
+    assert "prediction_120s" in columns
+    assert not any(column.startswith("target_valid_") for column in columns)
+    assert "future_mid" not in columns
     loaded = load_prediction_artifact(str(path))
+    np.testing.assert_allclose(loaded.predictions, _artifact().predictions)
+    np.testing.assert_allclose(loaded.targets, _artifact().targets)
+    assert loaded.labels == (60, 120)
 
-    assert set(loaded.targets_by_horizon) == {60, 120}
-    assert loaded.targets_by_horizon[120].tolist() == pytest.approx([0.02, 0.03])
 
-
-def test_prediction_artifact_rejects_mismatched_or_duplicate_samples() -> None:
-    with pytest.raises(ValueError, match="same sample count"):
+def test_prediction_artifact_rejects_non_finite_targets() -> None:
+    artifact = _artifact()
+    with pytest.raises(ValueError, match="targets.*finite"):
         PredictionArtifact(
-            predictions=np.asarray([0.1]),
-            targets=np.asarray([0.1, 0.2]),
-            metadata=_metadata(),
-            model_name="cnn1",
-            model_version="v1",
-            dataset_version="d1",
-            fold_index=1,
-            split="test",
-        )
-    duplicate = (_metadata()[0], _metadata()[0])
-    with pytest.raises(ValueError, match="duplicate prediction sample"):
-        PredictionArtifact(
-            predictions=np.asarray([0.1, 0.2]),
-            targets=np.asarray([0.1, 0.2]),
-            metadata=duplicate,
-            model_name="cnn1",
-            model_version="v1",
-            dataset_version="d1",
-            fold_index=1,
-            split="test",
+            predictions=artifact.predictions,
+            targets=np.asarray([[0.015, np.nan], [0.025, 0.035]]),
+            labels=artifact.labels,
+            metadata=artifact.metadata,
+            model_name=artifact.model_name,
+            model_version=artifact.model_version,
+            dataset_version=artifact.dataset_version,
+            fold_index=artifact.fold_index,
+            split=artifact.split,
         )
 
 

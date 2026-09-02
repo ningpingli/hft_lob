@@ -15,6 +15,7 @@ class Complete_HCNN(nn.Module):
         self,
         homological_structures: dict[str, Any],
         num_features: int = 20,
+        output_dim: int = 1,
     ) -> None:
         """初始化 Complete_HCNN。
 
@@ -142,7 +143,7 @@ class Complete_HCNN(nn.Module):
         self.lstm = nn.LSTM(
             input_size=96, hidden_size=32, num_layers=1, batch_first=True
         )
-        self.regression_head = nn.Linear(32, 1)
+        self.regression_head = nn.Linear(32, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

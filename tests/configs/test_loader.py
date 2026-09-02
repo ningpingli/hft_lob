@@ -11,7 +11,7 @@ def test_loads_two_stage_repository_configs() -> None:
     data = load_data_config("configs/dataset.yaml")
     model = load_model_config("configs/train.yaml", experiment_id="loader-test")
 
-    assert data.target.label == [60, 120, 300, 600]
+    assert data.target.labels == [60, 120, 300, 600]
     assert data.sessions.morning == ("09:30:00", "11:30:00") and data.sessions.afternoon == ("13:00:00", "14:57:00")
     assert model.experiment_id == "loader-test"
     assert model.training.betas == (0.9, 0.95)

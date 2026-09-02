@@ -18,7 +18,14 @@ from hft_lob.systems.contracts import SampleMeta
 class PrebuiltLOBDataset(Dataset):
     """一个 index 对应 fold 索引中的一个 anchor，也对应一个训练 sample。"""
 
-    def __init__(self, package_dir: str | Path, metadata: DatasetPackageMetadata, *, fold_index: int, split: str) -> None:
+    def __init__(
+        self,
+        package_dir: str | Path,
+        metadata: DatasetPackageMetadata,
+        *,
+        fold_index: int,
+        split: str,
+    ) -> None:
         self.package_dir = Path(package_dir).resolve()
         self.metadata = metadata
         self.index = pl.read_parquet(fold_index_path(self.package_dir, fold_index, split))
@@ -33,7 +40,7 @@ class PrebuiltLOBDataset(Dataset):
 
     def __getitem__(
         self, index: int
-    ) -> tuple[torch.Tensor, torch.Tensor, dict[int, torch.Tensor], SampleMeta]:
+    ) -> tuple[torch.Tensor, torch.Tensor, SampleMeta]:
         if index < 0:
             index += len(self)
         if index < 0 or index >= len(self):
@@ -46,12 +53,7 @@ class PrebuiltLOBDataset(Dataset):
         if start < session_start:
             raise ValueError("sample window crosses a session boundary")
         features = torch.from_numpy(cast(np.ndarray, self._features)[start : anchor + 1].copy())
-        target_row = cast(np.ndarray, self._targets)[anchor]
-        target = torch.from_numpy(target_row[:1].copy())
-        targets_by_horizon = {
-            label: torch.from_numpy(target_row[position : position + 1].copy())
-            for position, label in enumerate(self.metadata.labels)
-        }
+        target = torch.from_numpy(cast(np.ndarray, self._targets)[anchor].copy())
         market = cast(np.ndarray, self._market)[anchor]
         timestamp = cast(datetime, row["anchor_timestamp"])
         sample = SampleMeta(
@@ -60,12 +62,11 @@ class PrebuiltLOBDataset(Dataset):
             session_id=cast(str, row["session_id"]),
             anchor_timestamp=timestamp.isoformat(),
             mid_t=float(market[0]),
-            future_mid=float(market[1]),
-            bid1=float(market[2]),
-            ask1=float(market[3]),
-            spread=float(market[3] - market[2]),
+            bid1=float(market[1]),
+            ask1=float(market[2]),
+            spread=float(market[2] - market[1]),
         )
-        return features, target, targets_by_horizon, sample
+        return features, target, sample
 
     def __getstate__(self) -> dict[str, object]:
         state = dict(self.__dict__)

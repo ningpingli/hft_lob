@@ -87,6 +87,7 @@ class Transformer(nn.Module):
         activation: str = "relu",
         norm_first: bool = False,
         history_length: int = 100,
+        output_dim: int = 1,
     ) -> None:
         """初始化 Transformer。
 
@@ -129,7 +130,7 @@ class Transformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers, norm=encoder_norm
         )
-        self.regression_head = nn.Linear(d_model, 1)
+        self.regression_head = nn.Linear(d_model, output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。

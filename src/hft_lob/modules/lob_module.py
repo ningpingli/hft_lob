@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import lightning.pytorch as L
 import numpy as np
 import torch
@@ -17,15 +15,7 @@ from hft_lob.systems.losses import build_loss
 
 
 class LOBLightningModule(L.LightningModule):
-    """回归任务的 LightningModule：模型包装 + 损失 + 指标 + prediction artifact。
-
-    契约：
-    - 模型统一 ``forward(x) -> [B, 1]``（§18），最后一层 Linear(hidden, 1)，
-      无 softmax/sigmoid；
-    - 损失：Huber 默认（§20，``systems.losses.build_loss``）；
-    - 评估：MSE / MAE + 日级 Pearson TS-IC 统计 + prediction artifact parquet。
-    """
-    _test_horizon_targets: list[tuple[int, torch.Tensor]]
+    """多标签回归训练循环；模型和 batch 均使用 ``[B,L]``。"""
 
     def __init__(
         self,
@@ -35,24 +25,21 @@ class LOBLightningModule(L.LightningModule):
         dataset_version: str | None = None,
         model_version: str = "unknown",
         fold_index: int | None = None,
+        target_count: int = 1,
+        labels: tuple[int, ...] | None = None,
     ) -> None:
-        """初始化 LightningModule。
-
-        Args:
-            model: 待训练的模型（forward(x) -> [B, 1]）。
-            config: 实验配置根（training/evaluation 段）。
-            dataset_version: 数据集版本标识（§31）。
-            model_version: 模型版本标识（§29）。
-            fold_index: 当前 walk-forward fold 编号；生成 artifact 时必须提供。
-        """
         super().__init__()
-        # 不把 ModelRunConfig dataclass pickle 进 checkpoint；PyTorch 2.6 的
-        # weights_only 安全加载只接受张量和基础类型。配置已由实验目录单独备份。
+        if target_count <= 0:
+            raise ValueError("target_count must be positive")
+        if labels is not None and len(labels) != target_count:
+            raise ValueError("labels length must equal target_count")
         self.save_hyperparameters(
             {
                 "dataset_version": dataset_version,
                 "model_version": model_version,
                 "fold_index": fold_index,
+                "target_count": target_count,
+                "labels": labels,
             }
         )
         self.model = model
@@ -60,6 +47,12 @@ class LOBLightningModule(L.LightningModule):
         self.dataset_version = dataset_version
         self.model_version = model_version
         self.fold_index = fold_index
+        self.target_count = target_count
+        self.labels = (
+            tuple(labels)
+            if labels is not None
+            else ((1,) if target_count == 1 else tuple(range(1, target_count + 1)))
+        )
         self.loss_fn = build_loss(
             config.training.loss,
             huber_delta=config.training.loss_huber_delta,
@@ -68,20 +61,20 @@ class LOBLightningModule(L.LightningModule):
         self._validation_targets: list[torch.Tensor] = []
         self._test_predictions: list[torch.Tensor] = []
         self._test_targets: list[torch.Tensor] = []
-        self._test_horizon_targets: list[tuple[int, torch.Tensor]] = []
         self._test_metadata: list[SampleMeta] = []
         self.test_artifact: PredictionArtifact | None = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """前向：委托内部模型（§18 契约）。"""
+        """前向：委托内部模型并校验 ``[B,L]`` 输出。"""
         if x.ndim != 3:
             raise ValueError(f"model input must have shape [B,T,F], got {tuple(x.shape)}")
         predictions = self.model(x)
         if not isinstance(predictions, torch.Tensor):
             raise TypeError("model.forward must return a torch.Tensor")
-        if predictions.shape != (x.shape[0], 1):
+        if predictions.shape != (x.shape[0], self.target_count):
             raise ValueError(
-                f"model output must have shape [B,1], got {tuple(predictions.shape)}"
+                f"model output must have shape [B,{self.target_count}], "
+                f"got {tuple(predictions.shape)}"
             )
         return predictions
 
@@ -95,16 +88,10 @@ class LOBLightningModule(L.LightningModule):
             features=batch.features.to(device, non_blocking=True),
             targets=batch.targets.to(device, non_blocking=True),
             metadata=batch.metadata,
-            targets_by_horizon={
-                horizon: values.to(device, non_blocking=True)
-                for horizon, values in batch.targets_by_horizon.items()
-            },
         )
-
     def training_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
-        """训练步：回归损失（§20）。"""
         predictions, targets = self._shared_step(batch)
-        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        loss = self.loss_fn(predictions, targets)
         self.log(
             "train/loss",
             loss,
@@ -116,9 +103,8 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
-        """验证步：累积 preds/targets（epoch 端统一计算指标）。"""
         predictions, targets = self._shared_step(batch)
-        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        loss = self.loss_fn(predictions, targets)
         self._validation_predictions.append(predictions.detach().cpu())
         self._validation_targets.append(targets.detach().cpu())
         self.log(
@@ -133,12 +119,16 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self) -> None:
-        """验证期结束：整 epoch 计算 MSE/MAE，并记录稳定的 checkpoint key。"""
         if not self._validation_predictions:
             return
-        predictions = torch.cat(self._validation_predictions)[:, 0].numpy()
-        targets = torch.cat(self._validation_targets)[:, 0].numpy()
-        for name, value in evaluate(predictions, targets).items():
+        predictions = torch.cat(self._validation_predictions).numpy()
+        targets = torch.cat(self._validation_targets).numpy()
+        metric_values = [
+            evaluate(predictions[:, position], targets[:, position])
+            for position in range(self.target_count)
+        ]
+        for name in ("mse", "mae"):
+            value = float(np.mean([metrics[name] for metrics in metric_values]))
             self.log(
                 f"val/{name}",
                 torch.tensor(value, dtype=torch.float32, device=self.device),
@@ -151,14 +141,10 @@ class LOBLightningModule(L.LightningModule):
         self._validation_targets.clear()
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
-        """测试步：记录 loss，并累积生成统一 artifact 所需的数据。"""
         predictions, targets = self._shared_step(batch)
-        loss = cast(torch.Tensor, self.loss_fn(predictions, targets))
+        loss = self.loss_fn(predictions, targets)
         self._test_predictions.append(predictions.detach().cpu())
         self._test_targets.append(targets.detach().cpu())
-        self._test_horizon_targets.extend(
-            (horizon, values.detach().cpu()) for horizon, values in batch.targets_by_horizon.items()
-        )
         self._test_metadata.extend(batch.metadata)
         self.log("test/loss", loss, batch_size=targets.shape[0], sync_dist=True)
         return loss
@@ -166,35 +152,22 @@ class LOBLightningModule(L.LightningModule):
     def on_test_epoch_start(self) -> None:
         self._test_predictions.clear()
         self._test_targets.clear()
-        self._test_horizon_targets.clear()
         self._test_metadata.clear()
         self.test_artifact = None
 
     def on_test_epoch_end(self) -> None:
         if not self._test_predictions:
             raise RuntimeError("test completed without any batches")
-        horizon_lists: dict[int, list[torch.Tensor]] = {}
-        for horizon, values in cast(
-            list[tuple[int, torch.Tensor]], self._test_horizon_targets
-        ):
-            horizon_lists.setdefault(horizon, []).append(values)
-        horizon_targets = {
-            horizon: torch.cat(values) for horizon, values in horizon_lists.items()
-        }
         self.test_artifact = self._make_artifact(
             predictions=torch.cat(self._test_predictions),
-            targets=torch.cat(cast(list[torch.Tensor], self._test_targets)),
-            targets_by_horizon=horizon_targets,
+            targets=torch.cat(self._test_targets),
             metadata=tuple(self._test_metadata),
             split="test",
         )
         self._test_predictions.clear()
         self._test_targets.clear()
-        self._test_horizon_targets.clear()
         self._test_metadata.clear()
-
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        """AdamW（参数来自 training 段；无 scheduler）。"""
         training = self.config.training
         if training.learning_rate <= 0 or training.weight_decay < 0:
             raise ValueError("learning_rate must be > 0 and weight_decay must be >= 0")
@@ -209,8 +182,9 @@ class LOBLightningModule(L.LightningModule):
         if batch.features.ndim != 3:
             raise ValueError("batch features must have shape [B,T,F]")
         targets = batch.targets
-        if targets.ndim != 2 or targets.shape != (batch.features.shape[0], 1):
-            raise ValueError("batch targets must have shape [B,1]")
+        expected_shape = (batch.features.shape[0], self.target_count)
+        if targets.shape != expected_shape:
+            raise ValueError(f"batch targets must have shape {expected_shape}")
         if len(batch.metadata) != batch.features.shape[0]:
             raise ValueError("batch metadata count must match batch size")
         if not torch.isfinite(batch.features).all() or not torch.isfinite(targets).all():
@@ -222,7 +196,6 @@ class LOBLightningModule(L.LightningModule):
         *,
         predictions: torch.Tensor,
         targets: torch.Tensor,
-        targets_by_horizon: dict[int, torch.Tensor],
         metadata: tuple[SampleMeta, ...],
         split: str,
     ) -> PredictionArtifact:
@@ -231,16 +204,13 @@ class LOBLightningModule(L.LightningModule):
         if self.fold_index is None or self.fold_index <= 0:
             raise RuntimeError("positive fold_index is required to generate prediction artifacts")
         return PredictionArtifact(
-            predictions=np.asarray(predictions[:, 0].detach().cpu(), dtype=np.float64),
-            targets=np.asarray(targets[:, 0].detach().cpu(), dtype=np.float64),
+            predictions=np.asarray(predictions.detach().cpu(), dtype=np.float64),
+            targets=np.asarray(targets.detach().cpu(), dtype=np.float64),
+            labels=self.labels,
             metadata=metadata,
             model_name=self.config.model.name,
             model_version=self.model_version,
             dataset_version=self.dataset_version,
             fold_index=self.fold_index,
             split=split,
-            targets_by_horizon={
-                horizon: np.asarray(values[:, 0].detach().cpu(), dtype=np.float64)
-                for horizon, values in targets_by_horizon.items()
-            },
         )

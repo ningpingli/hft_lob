@@ -29,4 +29,3 @@ def test_every_registered_model_has_a_loadable_default_template() -> None:
     for model_name, path in template_paths.items():
         config = load_model_config(str(path), experiment_id=f"template-{model_name}")
         assert config.model.name == model_name
-        assert config.model.output_dim == 1

@@ -23,9 +23,9 @@ def build_baseline(
     *,
     feature_columns: Sequence[str],
     history_snapshots: int,
+    target_count: int = 1,
 ) -> BaselineModel:
-    """按实验配置构建 baseline。
-
+    """按实验配置构建支持多标签输出的 baseline。
     Args:
         name: ``zero`` / ``imbalance`` / ``ridge``。
         config: 特征数、窗口长度及 baseline 参数的唯一来源。
@@ -47,18 +47,20 @@ def build_baseline(
     if history <= 0:
         raise ValueError("history_snapshots must be > 0")
     if name == "zero":
-        return ZeroBaseline()
+        return ZeroBaseline(target_count=target_count)
     if name == "imbalance":
         bid_indices, ask_indices = volume_feature_indices(columns)
         return ImbalanceBaseline(
             bid_volume_indices=bid_indices,
             ask_volume_indices=ask_indices,
+            target_count=target_count,
         )
     if name == "ridge":
         return RidgeBaseline(
             num_features=num_features,
             history_snapshots=history,
             alpha=config.ridge_alpha,
+            target_count=target_count,
         )
     raise AssertionError("unreachable baseline branch")
 
