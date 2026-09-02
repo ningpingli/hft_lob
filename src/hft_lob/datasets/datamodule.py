@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 
 from hft_lob.configs.experiment import LoaderConfig
 from hft_lob.datasets.dataset_validator import DatasetPackage
+from hft_lob.datasets.lob_dataset import PrebuiltLOBDataset
 from hft_lob.systems.contracts import LOBBatch, SampleMeta
-from hft_lob.systems.prebuilt_dataset import PrebuiltLOBDataset
 
 
 def _seed_worker(worker_id: int, base_seed: int) -> None:

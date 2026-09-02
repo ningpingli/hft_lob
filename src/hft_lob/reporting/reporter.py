@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from hft_lob.systems.metrics import (
+from hft_lob.metrics.metrics import (
     METRIC_NAMES,
     DailyICRecord,
     EvaluationReport,

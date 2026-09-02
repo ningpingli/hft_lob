@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from hft_lob.application import BaselineRunResult, StandaloneTestResult, TrainingResult
-from hft_lob.main import main, parse_args
+from hft_lob.cli.main import main, parse_args
 
 
 def test_parse_training_cli_requires_dataset() -> None:
@@ -84,7 +84,7 @@ def test_main_passes_dataset_directly_to_training(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = Path(__file__).parents[1] / "configs" / "model.yaml"
+    config = Path(__file__).parents[1] / "configs" / "train.yaml"
     dataset_dir = tmp_path / "immutable-dataset"
     seen: dict[str, object] = {}
 
@@ -92,7 +92,7 @@ def test_main_passes_dataset_directly_to_training(
         seen["request"] = request
         return TrainingResult("cli-training", "dataset-id", 1)
 
-    main_module = importlib.import_module("hft_lob.main")
+    main_module = importlib.import_module("hft_lob.cli.main")
     monkeypatch.setattr(main_module, "run_training_application", fake_run)
     main(
         [
@@ -127,7 +127,7 @@ def test_main_routes_standalone_test_to_application(
             "results/test/evaluation.yaml",
         )
 
-    main_module = importlib.import_module("hft_lob.main")
+    main_module = importlib.import_module("hft_lob.cli.main")
     monkeypatch.setattr(main_module, "run_standalone_test", fake_run)
     main(
         [
@@ -155,7 +155,7 @@ def test_main_routes_baseline_run_to_application(monkeypatch: pytest.MonkeyPatch
         seen["request"] = request
         return BaselineRunResult("baseline-1", "dataset-id", 3, "manifest.yaml")
 
-    main_module = importlib.import_module("hft_lob.main")
+    main_module = importlib.import_module("hft_lob.cli.main")
     monkeypatch.setattr(main_module, "run_baseline_application", fake_run)
     main(
         [
@@ -181,7 +181,7 @@ def test_main_routes_data_build_to_application(monkeypatch: pytest.MonkeyPatch) 
         seen["request"] = request
         return Path("published/dataset-id")
 
-    main_module = importlib.import_module("hft_lob.main")
+    main_module = importlib.import_module("hft_lob.cli.main")
     monkeypatch.setattr(main_module, "build_dataset", fake_build)
     main(["data", "build", "--config", "data.yaml", "--output-root", "published"])
 

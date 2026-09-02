@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from hft_lob.systems.artifact import (
+from hft_lob.reporting.artifact import (
     PredictionArtifact,
     load_prediction_artifact,
     save_prediction_artifact,

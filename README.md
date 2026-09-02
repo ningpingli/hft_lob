@@ -21,7 +21,7 @@ uv run hft_lob --help
 
 ## 阶段一：构建数据集
 
-在 `configs/data.yaml` 中设置原始数据位置和构建参数。原始数据建议按交易日保存：
+在 `configs/dataset.yaml` 中设置原始数据位置和构建参数。原始数据建议按交易日保存：
 
 ```text
 <raw_dir>/688981/
@@ -34,7 +34,7 @@ uv run hft_lob --help
 
 ```bash
 uv run hft_lob data build \
-  --config configs/data.yaml \
+  --config configs/dataset.yaml \
   --output-root data/datasets/688981
 ```
 
@@ -42,7 +42,7 @@ PowerShell：
 
 ```powershell
 uv run hft_lob data build `
-  --config configs/data.yaml `
+  --config configs/dataset.yaml `
   --output-root data/datasets/688981
 ```
 
@@ -118,7 +118,7 @@ folds:
 每个已注册模型都有可直接加载的默认模板，位于 `configs/models/`：
 `cnn1.yaml`、`cnn2.yaml`、`deeplob.yaml`、`transformer.yaml`、`itransformer.yaml`、
 `lobtransformer.yaml`、`axiallob.yaml`、`dla.yaml`、`binbtabl.yaml`、`binctabl.yaml`
-和 `hlob.yaml`。选择对应文件即可替代手工修改 `configs/model.yaml`，例如：
+和 `hlob.yaml`。选择对应文件即可替代手工修改 `configs/train.yaml`，例如：
 
 ```bash
 uv run hft_lob train \
@@ -131,7 +131,7 @@ uv run hft_lob train \
 
 ```bash
 uv run hft_lob train \
-  --config configs/model.yaml \
+  --config configs/train.yaml \
   --dataset-dir data/datasets/688981/<dataset_id> \
   --experiment-id cnn1-688981
 ```
@@ -140,7 +140,7 @@ uv run hft_lob train \
 
 ```bash
 uv run hft_lob train \
-  --config configs/model.yaml \
+  --config configs/train.yaml \
   --dataset-dir data/datasets/688981/<dataset_id> \
   --experiment-id cnn1-688981 \
   --gpu-id 0
@@ -220,11 +220,15 @@ uv run mypy src/hft_lob
 
 ```text
 src/hft_lob/
-├── application/     # 数据构建与训练用例
-├── datasets/        # 样本编译、fold 索引、数据包写入与校验
-├── preprocessing/   # 清洗、特征、标签、标准化与分割
-├── models/          # 神经网络模型
+├── configs/         # Python 配置契约与 YAML 配置
+├── data_pipeline/   # 数据加载、处理、切分与写入
+├── datasets/        # LOB Dataset 与 Lightning DataModule
+├── models/          # 纯 PyTorch 模型与模型工厂
+├── modules/         # Lightning 训练/测试模块
+├── metrics/         # 评测指标
+├── reporting/       # 预测产物与评测报告
+├── cli/             # dataset/train/test 命令
 ├── baselines/       # Zero、Imbalance、Ridge
-├── systems/         # DataModule、训练执行、预测与评估
-└── main.py          # 统一 CLI 入口
+├── systems/         # walk-forward 训练编排与模型 bundle
+└── main.py          # CLI 兼容入口
 ```

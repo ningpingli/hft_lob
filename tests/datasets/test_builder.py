@@ -24,9 +24,9 @@ from hft_lob.configs.experiment import (
     WindowConfig,
 )
 from hft_lob.datasets.builder import build_dataset_package
+from hft_lob.datasets.datamodule import LOBDataModule
 from hft_lob.datasets.dataset_validator import open_dataset_package, validate_dataset_package
-from hft_lob.systems.lob_data_module import LOBDataModule
-from hft_lob.systems.prebuilt_dataset import PrebuiltLOBDataset
+from hft_lob.datasets.lob_dataset import PrebuiltLOBDataset
 
 
 def _config(tmp_path: Path) -> DataBuildConfig:

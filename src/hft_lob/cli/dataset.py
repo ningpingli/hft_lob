@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from hft_lob.configs import load_data_config
-from hft_lob.datasets.builder import build_dataset_package
-from hft_lob.datasets.dataset_validator import DatasetPackageMetadata, validate_dataset_package
+from hft_lob.data_pipeline.pipeline import build_dataset_package
+from hft_lob.data_pipeline.writer import DatasetPackageMetadata, validate_dataset_package
 
 
 @dataclass(frozen=True)

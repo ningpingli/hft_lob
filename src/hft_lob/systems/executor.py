@@ -12,12 +12,12 @@ from lightning.pytorch.loggers import Logger
 
 from hft_lob.baselines import BaselineRunner, build_baseline
 from hft_lob.configs.experiment import BaselineConfig, BaselineRunConfig, ModelRunConfig
+from hft_lob.datasets.datamodule import LOBDataModule
 from hft_lob.datasets.dataset_validator import DatasetPackage, DatasetPackageMetadata
-from hft_lob.models import build_model
-from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.models.lob_model import build_model
+from hft_lob.modules.lob_module import LOBLightningModule
+from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.systems.contracts import LOBBatch
-from hft_lob.systems.lob_data_module import LOBDataModule
-from hft_lob.systems.lob_module import LOBLightningModule
 from hft_lob.systems.model_bundle import save_model_bundle
 from hft_lob.systems.walk_forward import CandidateFoldRun
 
@@ -275,29 +275,6 @@ def build_trainer(
     return L.Trainer(**trainer_kwargs)
 
 
-def build_test_trainer(
-    log_dir: str,
-    *,
-    accelerator: str = "auto",
-    devices: int | list[int] | str = 1,
-) -> L.Trainer:
-    """构建独立评测（``hft_lob test`` / ``run_standalone_test``）用的纯推理 Trainer。
-
-    评测需要调用 ``trainer.test(model, datamodule, ckpt_path=...)`` 严格加载已保存的
-    Lightning checkpoint 并执行 test split。与训练用的 ``build_trainer`` 不同，评测
-    不附加 ModelCheckpoint / EarlyStopping 回调、不保存 checkpoint
-    （``enable_checkpointing=False``）、不记录日志，因此这里不要求 epochs/patience。
-    """
-    if not log_dir.strip():
-        raise ValueError("log_dir must not be empty")
-    return L.Trainer(
-        default_root_dir=str(Path(log_dir).expanduser()),
-        logger=False,
-        accelerator=accelerator,
-        devices=devices,
-        deterministic=True,
-        enable_checkpointing=False,
-    )
 
 
 def run_training(

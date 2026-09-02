@@ -6,9 +6,7 @@ import numpy as np
 import pytest
 
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.systems.artifact import PredictionArtifact
-from hft_lob.systems.contracts import SampleMeta
-from hft_lob.systems.metrics import (
+from hft_lob.metrics.metrics import (
     build_evaluation_report,
     daily_ic_records,
     evaluate,
@@ -19,6 +17,8 @@ from hft_lob.systems.metrics import (
     prediction_quantile_bins,
     ts_ic,
 )
+from hft_lob.reporting.artifact import PredictionArtifact
+from hft_lob.systems.contracts import SampleMeta
 
 
 def test_error_metrics_ignore_non_finite_pairs_and_reject_length_mismatch() -> None:

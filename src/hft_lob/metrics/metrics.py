@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.reporting.artifact import PredictionArtifact
 
 METRIC_NAMES: tuple[str, ...] = ("mse", "mae")
 

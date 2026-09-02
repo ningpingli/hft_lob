@@ -31,14 +31,15 @@ def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
     """Load a recorded checkpoint and evaluate it without fitting or checkpoint selection."""
     if not request.model_name.strip():
         raise ValueError("model_name must not be empty")
-    from hft_lob.datasets.dataset_validator import fold_index_path, load_dataset_package
-    from hft_lob.models import build_model
-    from hft_lob.systems.artifact import save_prediction_artifact
-    from hft_lob.systems.evaluation_plots import save_evaluation_outputs
-    from hft_lob.systems.executor import build_test_trainer, run_test
-    from hft_lob.systems.lob_data_module import LOBDataModule
-    from hft_lob.systems.lob_module import LOBLightningModule
-    from hft_lob.systems.metrics import build_evaluation_report
+    import lightning.pytorch as L
+
+    from hft_lob.data_pipeline.writer import fold_index_path, load_dataset_package
+    from hft_lob.datasets.datamodule import LOBDataModule
+    from hft_lob.metrics.metrics import build_evaluation_report
+    from hft_lob.models.lob_model import build_model
+    from hft_lob.modules.lob_module import LOBLightningModule
+    from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
+    from hft_lob.reporting.reporter import save_evaluation_outputs
     from hft_lob.systems.model_bundle import (
         load_model_bundle,
         validate_model_data_contract,
@@ -79,13 +80,24 @@ def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
         model_version=bundle.metadata.model_version,
         fold_index=fold_index,
     )
-    trainer = build_test_trainer(str(output_dir), accelerator="auto", devices=1)
-    artifact = run_test(
-        trainer,
-        module,
-        datamodule,
-        str(bundle.checkpoint_path),
+    trainer = L.Trainer(
+        default_root_dir=str(output_dir),
+        logger=False,
+        accelerator="auto",
+        devices=1,
+        deterministic=True,
+        enable_checkpointing=False,
     )
+    trainer.test(
+        model=module,
+        datamodule=datamodule,
+        ckpt_path=str(bundle.checkpoint_path),
+    )
+    artifact = getattr(module, "test_artifact", None)
+    if not isinstance(artifact, PredictionArtifact):
+        raise RuntimeError("test completed without a PredictionArtifact")
+    if artifact.split != "test":
+        raise RuntimeError("test artifact split must be 'test'")
     predictions_path = save_prediction_artifact(
         artifact=artifact,
         path=str(output_dir / "predictions.parquet"),

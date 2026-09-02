@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from hft_lob.systems.evaluation_plots import load_evaluation_report, save_evaluation_outputs
-from hft_lob.systems.metrics import DailyICRecord, EvaluationReport, PredictionBinRecord
+from hft_lob.metrics.metrics import DailyICRecord, EvaluationReport, PredictionBinRecord
+from hft_lob.reporting.reporter import load_evaluation_report, save_evaluation_outputs
 
 
 def _report() -> EvaluationReport:
