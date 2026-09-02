@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from hft_lob.application.data_build import DatasetBuildRequest, build_dataset
+from hft_lob.cli.dataset import DatasetBuildRequest, build_dataset
 
 
 def test_build_dataset_loads_config_and_delegates(
@@ -11,14 +11,14 @@ def test_build_dataset_loads_config_and_delegates(
     config = object()
     seen: dict[str, object] = {}
 
-    monkeypatch.setattr("hft_lob.application.data_build.load_data_config", lambda path: config)
+    monkeypatch.setattr("hft_lob.cli.dataset.load_data_config", lambda path: config)
 
     def fake_build(received_config: object, output_root: str) -> Path:
         seen["config"] = received_config
         seen["output_root"] = output_root
         return Path("published/dataset-id")
 
-    monkeypatch.setattr("hft_lob.application.data_build.build_dataset_package", fake_build)
+    monkeypatch.setattr("hft_lob.cli.dataset.build_dataset_package", fake_build)
 
     result = build_dataset(DatasetBuildRequest("data.yaml", "published"))
 

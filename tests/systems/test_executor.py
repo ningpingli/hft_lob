@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import polars as pl
+from polars.testing import assert_frame_equal
 
 from hft_lob.application.baseline import BaselineRunRequest, run_baseline_application
+from hft_lob.cli.test import StandaloneTestRequest, run_standalone_test
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
     CleaningConfig,
@@ -26,10 +28,11 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.datasets.builder import build_dataset_package
-from hft_lob.datasets.dataset_validator import open_dataset_package
+from hft_lob.data_pipeline.builder import build_dataset_package
+from hft_lob.data_pipeline.dataset_validator import open_dataset_package
 from hft_lob.systems.baseline_manifest import load_default_manifest
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
+from hft_lob.systems.model_bundle import load_model_bundle
 from hft_lob.systems.walk_forward import run_walk_forward
 
 
@@ -43,9 +46,7 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     report = run_walk_forward(
         open_dataset_package(dataset_dir),
         model_config,
-        executor=DefaultWalkForwardExecutor(
-            str(tmp_path / "results"), accelerator="cpu"
-        ),
+        executor=DefaultWalkForwardExecutor(str(tmp_path / "results"), accelerator="cpu"),
     )
 
     assert len(report.fold_results) == 1
@@ -58,6 +59,25 @@ def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Pa
     assert (output_dir / "daily_ic_curve.png").is_file()
     assert (output_dir / "time_series_grouped_return_curve.png").is_file()
     assert "mean_daily_ic_mean" in report.summary["cnn1"]
+
+    bundle = load_model_bundle(output_dir)
+    assert bundle.checkpoint_path == Path(result.checkpoint_path or "").resolve()
+    assert bundle.metadata.model_name == "cnn1"
+    standalone_dir = tmp_path / "standalone"
+    standalone = run_standalone_test(
+        StandaloneTestRequest(
+            test_data_dir=str(dataset_dir),
+            model_name="cnn1",
+            model_dir=str(output_dir),
+            output_dir=str(standalone_dir),
+        )
+    )
+    assert standalone.sample_count == result.evaluation.sample_count
+    assert Path(standalone.evaluation_path).is_file()
+    assert_frame_equal(
+        pl.read_parquet(standalone.predictions_path).select("prediction", "target"),
+        pl.read_parquet(result.predictions_path).select("prediction", "target"),
+    )
 
 
 def test_baseline_run_publishes_dataset_manifest(

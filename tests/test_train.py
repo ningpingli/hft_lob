@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
+from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.systems import executor as train
-from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.contracts import SampleMeta
 
 
@@ -95,6 +95,8 @@ def test_run_training_delegates_to_lightning() -> None:
             {"model": module, "datamodule": datamodule, "ckpt_path": "resume.ckpt"},
         )
     ]
+
+
 
 
 def test_run_test_returns_module_artifact() -> None:

@@ -21,7 +21,7 @@ uv run hft_lob --help
 
 ## 阶段一：构建数据集
 
-在 `configs/data.yaml` 中设置原始数据位置和构建参数。原始数据建议按交易日保存：
+在 `configs/dataset.yaml` 中设置原始数据位置和构建参数。原始数据建议按交易日保存：
 
 ```text
 <raw_dir>/688981/
@@ -34,7 +34,7 @@ uv run hft_lob --help
 
 ```bash
 uv run hft_lob data build \
-  --config configs/data.yaml \
+  --config configs/dataset.yaml \
   --output-root data/datasets/688981
 ```
 
@@ -42,7 +42,7 @@ PowerShell：
 
 ```powershell
 uv run hft_lob data build `
-  --config configs/data.yaml `
+  --config configs/dataset.yaml `
   --output-root data/datasets/688981
 ```
 
@@ -118,7 +118,7 @@ folds:
 每个已注册模型都有可直接加载的默认模板，位于 `configs/models/`：
 `cnn1.yaml`、`cnn2.yaml`、`deeplob.yaml`、`transformer.yaml`、`itransformer.yaml`、
 `lobtransformer.yaml`、`axiallob.yaml`、`dla.yaml`、`binbtabl.yaml`、`binctabl.yaml`
-和 `hlob.yaml`。选择对应文件即可替代手工修改 `configs/model.yaml`，例如：
+和 `hlob.yaml`。选择对应文件即可替代手工修改 `configs/train.yaml`，例如：
 
 ```bash
 uv run hft_lob train \
@@ -131,7 +131,7 @@ uv run hft_lob train \
 
 ```bash
 uv run hft_lob train \
-  --config configs/model.yaml \
+  --config configs/train.yaml \
   --dataset-dir data/datasets/688981/<dataset_id> \
   --experiment-id cnn1-688981
 ```
@@ -140,7 +140,7 @@ uv run hft_lob train \
 
 ```bash
 uv run hft_lob train \
-  --config configs/model.yaml \
+  --config configs/train.yaml \
   --dataset-dir data/datasets/688981/<dataset_id> \
   --experiment-id cnn1-688981 \
   --gpu-id 0
@@ -158,11 +158,30 @@ loggers/results/<experiment_id>/
     └── fold_001/
         └── <model>/
             ├── checkpoints/best_val_model.ckpt
+            ├── model_config.yaml
+            ├── model_metadata.yaml
             ├── predictions.parquet
             ├── evaluation.yaml
             ├── daily_ic_curve.png
             └── time_series_grouped_return_curve.png
 ```
+
+每个 fold/model 目录都是可移动的自包含模型目录。独立测试只需要测试数据集、
+模型名称和该模型目录，不读取训练实验目录：
+
+```bash
+uv run hft_lob test \
+  --test-data-dir data/datasets/688981/<test_dataset_id> \
+  --model-name cnn1 \
+  --model-dir loggers/results/<experiment_id>/walk_forward/fold_001/cnn1
+```
+
+可通过 `--output-dir` 指定输出位置；默认写入
+`loggers/results/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
+与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致，
+且必须包含 `model_metadata.yaml` 中 `fold_index` 对应的 test split（评测在该 fold
+定义的测试窗口上进行，不会用新划分训练或验证）。命令严格加载训练生成的 Lightning
+checkpoint，只运行 test，不训练或重新选择 checkpoint。
 
 共享 baseline 结果和权威引用保存在数据集实验空间：
 
@@ -201,11 +220,15 @@ uv run mypy src/hft_lob
 
 ```text
 src/hft_lob/
-├── application/     # 数据构建与训练用例
-├── datasets/        # 样本编译、fold 索引、数据包写入与校验
-├── preprocessing/   # 清洗、特征、标签、标准化与分割
-├── models/          # 神经网络模型
+├── configs/         # Python 配置契约与 YAML 配置
+├── data_pipeline/   # 数据加载、处理、切分与写入
+├── datasets/        # LOB Dataset 与 Lightning DataModule
+├── models/          # 纯 PyTorch 模型与模型工厂
+├── modules/         # Lightning 训练/测试模块
+├── metrics/         # 评测指标
+├── reporting/       # 预测产物与评测报告
+├── cli/             # dataset/train/test 命令
 ├── baselines/       # Zero、Imbalance、Ridge
-├── systems/         # DataModule、训练执行、预测与评估
-└── main.py          # 统一 CLI 入口
+├── systems/         # walk-forward 训练编排与模型 bundle
+└── main.py          # CLI 兼容入口
 ```

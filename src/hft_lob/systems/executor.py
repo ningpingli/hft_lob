@@ -12,12 +12,13 @@ from lightning.pytorch.loggers import Logger
 
 from hft_lob.baselines import BaselineRunner, build_baseline
 from hft_lob.configs.experiment import BaselineConfig, BaselineRunConfig, ModelRunConfig
-from hft_lob.datasets.dataset_validator import DatasetPackage, DatasetPackageMetadata
-from hft_lob.models import build_model
-from hft_lob.systems.artifact import PredictionArtifact
+from hft_lob.data_pipeline.dataset_validator import DatasetPackage, DatasetPackageMetadata
+from hft_lob.datasets.datamodule import LOBDataModule
+from hft_lob.models.lob_model import build_model
+from hft_lob.modules.lob_module import LOBLightningModule
+from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.systems.contracts import LOBBatch
-from hft_lob.systems.lob_data_module import LOBDataModule
-from hft_lob.systems.lob_module import LOBLightningModule
+from hft_lob.systems.model_bundle import save_model_bundle
 from hft_lob.systems.walk_forward import CandidateFoldRun
 
 
@@ -91,6 +92,14 @@ class DefaultWalkForwardExecutor:
             raise RuntimeError(
                 f"training completed without a best checkpoint for {candidate_name} fold {fold_index}"
             )
+        save_model_bundle(
+            output_dir,
+            config=config,
+            dataset_metadata=metadata,
+            checkpoint_path=checkpoint_path,
+            model_version=model_version,
+            fold_index=fold_index,
+        )
         artifact = run_test(
             trainer,
             lightning_module,
@@ -264,6 +273,8 @@ def build_trainer(
     if gradient_clip_val is not None:
         trainer_kwargs["gradient_clip_val"] = gradient_clip_val
     return L.Trainer(**trainer_kwargs)
+
+
 
 
 def run_training(

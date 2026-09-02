@@ -8,8 +8,8 @@ from hft_lob.configs.loader import load_baseline_config, load_data_config, load_
 
 
 def test_loads_two_stage_repository_configs() -> None:
-    data = load_data_config("configs/data.yaml")
-    model = load_model_config("configs/model.yaml", experiment_id="loader-test")
+    data = load_data_config("configs/dataset.yaml")
+    model = load_model_config("configs/train.yaml", experiment_id="loader-test")
 
     assert data.target.label == [60, 120, 300, 600]
     assert data.sessions.morning == ("09:30:00", "11:30:00") and data.sessions.afternoon == ("13:00:00", "14:57:00")
