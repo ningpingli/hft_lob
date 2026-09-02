@@ -70,9 +70,15 @@ def load_data_config(config_path: str) -> DataBuildConfig:
     return config
 
 
-def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig:
-    """加载阶段二模型配置；不包含 baseline 生成配置。"""
-    if not experiment_id.strip():
+def load_model_config(
+    config_path: str, *, experiment_id: str | None = None
+) -> ModelRunConfig:
+    """加载阶段二模型配置；不包含 baseline 生成配置。
+
+    ``experiment_id`` 仅用于标记调用方上下文；为 None 时（如独立模型评测）
+    配置以空实验标识加载，评测流程不消费该字段。
+    """
+    if experiment_id is not None and not experiment_id.strip():
         raise ValueError("experiment_id must not be empty")
     raw = _load_mapping(config_path, _MODEL_SECTIONS)
     training = _section(raw, "training")
@@ -80,7 +86,7 @@ def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig
     evaluation = _section(raw, "evaluation")
     try:
         config = ModelRunConfig(
-            experiment_id=experiment_id,
+            experiment_id=experiment_id or "",
             loader=LoaderConfig(**_section(raw, "loader")),
             model=ModelConfig(**_section(raw, "model")),
             training=TrainingConfig(**training),

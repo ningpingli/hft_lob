@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path, PurePosixPath
 
 import torch
@@ -210,7 +210,9 @@ def save_model_bundle(
         data_contract=ModelDataContract.from_dataset_metadata(dataset_metadata),
     )
     atomic_dump_yaml(root / MODEL_METADATA_FILENAME, metadata.to_dict())
-    return load_model_bundle(root)
+    # experiment_id 是训练运行上下文，不写入 model_config.yaml；返回的
+    # ModelBundle 与后续 load_model_bundle 读到的一致（无实验标识）。
+    return ModelBundle(root, metadata, replace(config, experiment_id=""), checkpoint)
 
 
 def load_model_bundle(model_dir: str | Path) -> ModelBundle:
@@ -228,7 +230,7 @@ def load_model_bundle(model_dir: str | Path) -> ModelBundle:
     if not isinstance(raw_metadata, dict):
         raise TypeError(f"{MODEL_METADATA_FILENAME} must contain a mapping")
     metadata = ModelBundleMetadata.from_dict(raw_metadata)
-    config = load_model_config(str(config_path), experiment_id=f"test-{metadata.model_version}")
+    config = load_model_config(str(config_path))
     if config.model.name != metadata.model_name:
         raise ValueError("model_config.yaml model name does not match model_metadata.yaml")
     checkpoint_path = root.joinpath(*PurePosixPath(metadata.checkpoint_file).parts)

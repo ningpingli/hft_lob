@@ -90,11 +90,7 @@ def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
         artifact=artifact,
         path=str(output_dir / "predictions.parquet"),
     )
-    report = build_evaluation_report(
-        artifact,
-        bundle.config.evaluation,
-        seed=bundle.config.seed + fold_index,
-    )
+    report = build_evaluation_report(artifact, bundle.config.evaluation)
     outputs = save_evaluation_outputs(report, output_dir)
     return StandaloneTestResult(
         model_name=bundle.metadata.model_name,

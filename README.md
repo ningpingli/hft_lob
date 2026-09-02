@@ -178,9 +178,10 @@ uv run hft_lob test \
 
 可通过 `--output-dir` 指定输出位置；默认写入
 `loggers/results/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
-与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致。
-命令严格加载训练生成的 Lightning checkpoint，只运行 test，不训练或重新选择
-checkpoint。
+与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致，
+且必须包含 `model_metadata.yaml` 中 `fold_index` 对应的 test split（评测在该 fold
+定义的测试窗口上进行，不会用新划分训练或验证）。命令严格加载训练生成的 Lightning
+checkpoint，只运行 test，不训练或重新选择 checkpoint。
 
 共享 baseline 结果和权威引用保存在数据集实验空间：
 
