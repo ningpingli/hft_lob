@@ -11,6 +11,11 @@ from hft_lob.application.data_build import (
     inspect_dataset,
     verify_dataset,
 )
+from hft_lob.application.testing import (
+    StandaloneTestRequest,
+    StandaloneTestResult,
+    run_standalone_test,
+)
 from hft_lob.application.training import (
     TrainingRequest,
     TrainingResult,
@@ -21,11 +26,14 @@ __all__ = [
     "BaselineRunRequest",
     "BaselineRunResult",
     "DatasetBuildRequest",
+    "StandaloneTestRequest",
+    "StandaloneTestResult",
     "TrainingRequest",
     "TrainingResult",
     "build_dataset",
     "inspect_dataset",
     "run_baseline_application",
+    "run_standalone_test",
     "run_training_application",
     "verify_dataset",
 ]

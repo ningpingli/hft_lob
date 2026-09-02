@@ -18,6 +18,7 @@ from hft_lob.systems.artifact import PredictionArtifact
 from hft_lob.systems.contracts import LOBBatch
 from hft_lob.systems.lob_data_module import LOBDataModule
 from hft_lob.systems.lob_module import LOBLightningModule
+from hft_lob.systems.model_bundle import save_model_bundle
 from hft_lob.systems.walk_forward import CandidateFoldRun
 
 
@@ -91,6 +92,14 @@ class DefaultWalkForwardExecutor:
             raise RuntimeError(
                 f"training completed without a best checkpoint for {candidate_name} fold {fold_index}"
             )
+        save_model_bundle(
+            output_dir,
+            config=config,
+            dataset_metadata=metadata,
+            checkpoint_path=checkpoint_path,
+            model_version=model_version,
+            fold_index=fold_index,
+        )
         artifact = run_test(
             trainer,
             lightning_module,
@@ -264,6 +273,25 @@ def build_trainer(
     if gradient_clip_val is not None:
         trainer_kwargs["gradient_clip_val"] = gradient_clip_val
     return L.Trainer(**trainer_kwargs)
+
+
+def build_test_trainer(
+    log_dir: str,
+    *,
+    accelerator: str = "auto",
+    devices: int | list[int] | str = 1,
+) -> L.Trainer:
+    """Build a deterministic inference-only Trainer without training callbacks."""
+    if not log_dir.strip():
+        raise ValueError("log_dir must not be empty")
+    return L.Trainer(
+        default_root_dir=str(Path(log_dir).expanduser()),
+        logger=False,
+        accelerator=accelerator,
+        devices=devices,
+        deterministic=True,
+        enable_checkpointing=False,
+    )
 
 
 def run_training(

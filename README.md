@@ -158,11 +158,29 @@ loggers/results/<experiment_id>/
     └── fold_001/
         └── <model>/
             ├── checkpoints/best_val_model.ckpt
+            ├── model_config.yaml
+            ├── model_metadata.yaml
             ├── predictions.parquet
             ├── evaluation.yaml
             ├── daily_ic_curve.png
             └── time_series_grouped_return_curve.png
 ```
+
+每个 fold/model 目录都是可移动的自包含模型目录。独立测试只需要测试数据集、
+模型名称和该模型目录，不读取训练实验目录：
+
+```bash
+uv run hft_lob test \
+  --test-data-dir data/datasets/688981/<test_dataset_id> \
+  --model-name cnn1 \
+  --model-dir loggers/results/<experiment_id>/walk_forward/fold_001/cnn1
+```
+
+可通过 `--output-dir` 指定输出位置；默认写入
+`loggers/results/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
+与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致。
+命令严格加载训练生成的 Lightning checkpoint，只运行 test，不训练或重新选择
+checkpoint。
 
 共享 baseline 结果和权威引用保存在数据集实验空间：
 

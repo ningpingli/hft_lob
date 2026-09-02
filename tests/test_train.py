@@ -82,6 +82,20 @@ def test_build_trainer_adds_default_callbacks(
     assert sum(isinstance(item, EarlyStopping) for item in captured["callbacks"]) == 1
 
 
+def test_build_test_trainer_disables_training_callbacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(train.L, "Trainer", lambda **kwargs: captured.update(kwargs) or kwargs)
+
+    result = train.build_test_trainer(str(tmp_path), accelerator="cpu")
+
+    assert result == captured
+    assert captured["enable_checkpointing"] is False
+    assert captured["logger"] is False
+    assert "callbacks" not in captured
+
+
 def test_run_training_delegates_to_lightning() -> None:
     trainer = FakeTrainer()
     module = SimpleNamespace()
