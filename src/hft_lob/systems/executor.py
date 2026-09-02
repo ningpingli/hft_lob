@@ -244,11 +244,11 @@ def build_trainer(
     configured_callbacks = list(callbacks or [])
     if not any(isinstance(callback, ModelCheckpoint) for callback in configured_callbacks):
         configured_callbacks.append(
-            build_checkpoint_callback(log_dir, monitor="val/ts_ic", mode="max")
+            build_checkpoint_callback(log_dir, monitor="val/mse", mode="min")
         )
     if not any(isinstance(callback, EarlyStopping) for callback in configured_callbacks):
         configured_callbacks.append(
-            build_early_stopping_callback(monitor="val/ts_ic", mode="max", patience=patience)
+            build_early_stopping_callback(monitor="val/mse", mode="min", patience=patience)
         )
     trainer_kwargs: dict[str, Any] = {
         "default_root_dir": str(Path(log_dir).expanduser()),

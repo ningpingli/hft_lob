@@ -11,13 +11,7 @@ baselines:
   ridge_alpha: 1.0
 
 evaluation:
-  metrics: [mae, rmse, ts_ic, rank_ic, direction_accuracy,
-            up_precision, up_recall, down_precision, down_recall]
-  report_daily: true
   prediction_bins: 10
-  confidence_level: 0.95
-  bootstrap_samples: 1000
-  bootstrap_block_size: 20
 
 folds:
   start_fold: 1

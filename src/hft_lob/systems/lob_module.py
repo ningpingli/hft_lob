@@ -23,9 +23,7 @@ class LOBLightningModule(L.LightningModule):
     - 模型统一 ``forward(x) -> [B, 1]``（§18），最后一层 Linear(hidden, 1)，
       无 softmax/sigmoid；
     - 损失：Huber 默认（§20，``systems.losses.build_loss``）；
-    - 评估：TS-IC / RankIC / MAE / RMSE / Direction（§21，
-      ``systems.metrics``）+ 日级稳定性（§14 序列相关处理）+ prediction
-      artifact parquet（§28，``systems.artifact``）。
+    - 评估：MSE / MAE + 日级 Pearson TS-IC 统计 + prediction artifact parquet。
     """
     _test_horizon_targets: list[tuple[int, torch.Tensor]]
 
@@ -135,24 +133,18 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self) -> None:
-        """验证期结束：整 epoch 计算指标，并以 ``val/<metric>`` 记录。
-
-        TS-IC 的稳定 key 为 ``val/ts_ic``，供 checkpoint 与 early stopping 使用。
-        """
+        """验证期结束：整 epoch 计算 MSE/MAE，并记录稳定的 checkpoint key。"""
         if not self._validation_predictions:
             return
         predictions = torch.cat(self._validation_predictions)[:, 0].numpy()
         targets = torch.cat(self._validation_targets)[:, 0].numpy()
-        metrics = evaluate(predictions, targets)
-        for name in self.config.evaluation.metrics:
-            if name not in metrics:
-                raise ValueError(f"unsupported validation metric: {name!r}")
+        for name, value in evaluate(predictions, targets).items():
             self.log(
                 f"val/{name}",
-                torch.tensor(metrics[name], dtype=torch.float32, device=self.device),
+                torch.tensor(value, dtype=torch.float32, device=self.device),
                 on_step=False,
                 on_epoch=True,
-                prog_bar=name == "ts_ic",
+                prog_bar=name == "mse",
                 sync_dist=True,
             )
         self._validation_predictions.clear()

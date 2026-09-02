@@ -14,6 +14,7 @@ from hft_lob.systems.artifact import save_prediction_artifact
 from hft_lob.systems.baseline_manifest import (
     BaselineArtifactReference,
     BaselineManifest,
+    artifact_file_sha256,
     baseline_run_root,
     baseline_space,
     default_manifest_path,
@@ -107,31 +108,19 @@ def run_baseline_application(request: BaselineRunRequest) -> BaselineRunResult:
             report = build_evaluation_report(
                 artifact,
                 config.evaluation,
-                seed=config.seed + fold_index,
             )
             outputs = save_evaluation_outputs(report, Path(predictions_path).parent)
             root = baseline_space(package.metadata.dataset_id).resolve()
+            prediction_file = Path(predictions_path).resolve()
+            evaluation_file = Path(outputs["evaluation_report"]).resolve()
             references.append(
                 BaselineArtifactReference(
                     fold_index=fold_index,
                     baseline_name=baseline_name,
-                    predictions_path=Path(predictions_path).resolve()
-                    .relative_to(root)
-                    .as_posix(),
-                    evaluation_path=Path(outputs["evaluation_report"])
-                    .resolve()
-                    .relative_to(root)
-                    .as_posix(),
-                    overall=dict(report.overall),
-                    mean_daily_ic=report.mean_daily_ic,
-                    daily_metrics=tuple(
-                        {
-                            "trade_date": record.trade_date,
-                            "metrics": dict(record.metrics),
-                        }
-                        for record in report.daily
-                    ),
-                    horizon_decay=tuple(asdict(record) for record in report.horizon_decay),
+                    predictions_path=prediction_file.relative_to(root).as_posix(),
+                    predictions_sha256=artifact_file_sha256(prediction_file),
+                    evaluation_path=evaluation_file.relative_to(root).as_posix(),
+                    evaluation_sha256=artifact_file_sha256(evaluation_file),
                 )
             )
 

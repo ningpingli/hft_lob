@@ -78,7 +78,6 @@ def load_model_config(config_path: str, *, experiment_id: str) -> ModelRunConfig
     training = _section(raw, "training")
     _tuple_field(training, "betas")
     evaluation = _section(raw, "evaluation")
-    _tuple_field(evaluation, "metrics")
     try:
         config = ModelRunConfig(
             experiment_id=experiment_id,
@@ -103,7 +102,6 @@ def load_baseline_config(config_path: str, *, experiment_id: str) -> BaselineRun
     baselines = _section(raw, "baselines")
     _tuple_field(baselines, "names")
     evaluation = _section(raw, "evaluation")
-    _tuple_field(evaluation, "metrics")
     try:
         config = BaselineRunConfig(
             experiment_id=experiment_id,
@@ -116,8 +114,6 @@ def load_baseline_config(config_path: str, *, experiment_id: str) -> BaselineRun
     except TypeError as exc:
         raise ValueError(f"invalid config field: {exc}") from exc
     _validate_baseline_config(config)
-    return config
-    _validate_model_config(config)
     return config
 
 
@@ -185,15 +181,15 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("model.name must not be empty")
     if config.model.output_dim != 1:
         raise ValueError("model.output_dim must be 1 for scalar model contract")
-    if config.training.monitor_mode not in {"min", "max"}:
-        raise ValueError("training.monitor_mode must be 'min' or 'max'")
+    if config.training.monitor_metric not in {"val/mse", "val/mae"}:
+        raise ValueError("training.monitor_metric must be 'val/mse' or 'val/mae'")
+    if config.training.monitor_mode != "min":
+        raise ValueError("training.monitor_mode must be 'min' for error metrics")
     if len(config.training.betas) != 2 or any(
         isinstance(beta, bool) or not isinstance(beta, (int, float)) or not 0 <= beta < 1
         for beta in config.training.betas
     ):
         raise ValueError("training.betas must contain two values in [0, 1)")
-    if len(config.evaluation.metrics) == 0:
-        raise ValueError("evaluation.metrics must not be empty")
 
 def _validate_baseline_config(config: BaselineRunConfig) -> None:
     if config.loader.batch_size <= 0:
@@ -210,5 +206,3 @@ def _validate_baseline_config(config: BaselineRunConfig) -> None:
         raise ValueError("baselines.ridge_alpha must be > 0")
     if isinstance(config.seed, bool) or not isinstance(config.seed, int) or not 0 <= config.seed < 2**32:
         raise ValueError("seed must be an integer in [0, 2**32)")
-    if len(config.evaluation.metrics) == 0:
-        raise ValueError("evaluation.metrics must not be empty")
