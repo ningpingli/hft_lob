@@ -8,8 +8,8 @@ from pathlib import Path
 import polars as pl
 
 from hft_lob.configs.experiment import DataBuildConfig
-from hft_lob.datasets.dataset_validator import FOLD_INDEX_COLUMNS
-from hft_lob.preprocessing.split import (
+from hft_lob.data_pipeline.dataset_validator import FOLD_INDEX_COLUMNS
+from hft_lob.data_pipeline.split import (
     Fold,
     WalkForwardPlan,
     chronological_split,

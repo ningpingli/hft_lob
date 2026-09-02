@@ -7,7 +7,7 @@ import pandas as pd
 import polars as pl
 
 from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS, SessionConfig
-from hft_lob.preprocessing.clean import DataCleaner
+from hft_lob.data_pipeline.clean import DataCleaner
 
 
 def _book_row(timestamp: datetime, *, bid: float | None, ask: float | None) -> dict[str, object]:

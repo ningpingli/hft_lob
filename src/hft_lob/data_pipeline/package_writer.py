@@ -14,10 +14,10 @@ import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 
-from hft_lob.datasets.dataset_validator import DatasetPackageMetadata, validate_dataset_package
-from hft_lob.datasets.fold_index_builder import write_fold_indexes
-from hft_lob.datasets.sample_compiler import CompiledDay, CompiledSession
-from hft_lob.preprocessing.split import WalkForwardPlan
+from hft_lob.data_pipeline.dataset_validator import DatasetPackageMetadata, validate_dataset_package
+from hft_lob.data_pipeline.fold_index_builder import write_fold_indexes
+from hft_lob.data_pipeline.sample_compiler import CompiledDay, CompiledSession
+from hft_lob.data_pipeline.split import WalkForwardPlan
 
 logger = logging.getLogger(__name__)
 

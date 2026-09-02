@@ -1,6 +1,6 @@
 """不可变数据包写入、读取与校验。"""
 
-from hft_lob.datasets.dataset_validator import (
+from hft_lob.data_pipeline.dataset_validator import (
     DatasetPackage,
     DatasetPackageMetadata,
     compute_dataset_id,
@@ -10,7 +10,7 @@ from hft_lob.datasets.dataset_validator import (
     stable_config_hash,
     validate_dataset_package,
 )
-from hft_lob.datasets.package_writer import DatasetPackageWriter
+from hft_lob.data_pipeline.package_writer import DatasetPackageWriter
 
 __all__ = [
     "DatasetPackage",

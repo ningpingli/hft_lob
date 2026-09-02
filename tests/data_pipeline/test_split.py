@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from hft_lob.configs.experiment import SplitConfig, WalkForwardConfig
-from hft_lob.preprocessing.split import (
+from hft_lob.data_pipeline.split import (
     chronological_split,
     walk_forward_folds,
 )

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from hft_lob.preprocessing.normalize import CausalRollingStandardizer
+from hft_lob.data_pipeline.normalize import CausalRollingStandardizer
 
 
 def _frame(values: list[float], *, valid: list[bool] | None = None) -> pl.DataFrame:

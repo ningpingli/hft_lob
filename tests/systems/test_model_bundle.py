@@ -14,7 +14,7 @@ from hft_lob.configs.experiment import (
     ModelRunConfig,
     TrainingConfig,
 )
-from hft_lob.datasets.dataset_validator import (
+from hft_lob.data_pipeline.dataset_validator import (
     DatasetPackageMetadata,
     compute_dataset_id,
 )

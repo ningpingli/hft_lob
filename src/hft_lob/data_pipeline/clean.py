@@ -12,7 +12,7 @@ import pandas as pd
 import polars as pl
 
 from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS, SessionConfig
-from hft_lob.preprocessing.quality import QualityReport, run_quality_checks
+from hft_lob.data_pipeline.quality import QualityReport, run_quality_checks
 
 _LOB_COLUMNS: tuple[str, ...] = RAW_FEATURE_COLUMNS[:20]
 _VOLUME_COLUMNS: tuple[str, ...] = tuple(

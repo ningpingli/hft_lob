@@ -13,7 +13,7 @@ import numpy as np
 import yaml
 
 from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.datasets.dataset_validator import DatasetPackage
+from hft_lob.data_pipeline.dataset_validator import DatasetPackage
 from hft_lob.metrics.metrics import EvaluationReport, build_evaluation_report
 from hft_lob.reporting.artifact import load_prediction_artifact
 from hft_lob.reporting.reporter import load_evaluation_report

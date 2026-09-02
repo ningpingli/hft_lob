@@ -5,7 +5,7 @@ from __future__ import annotations
 import polars as pl
 
 from hft_lob.configs.experiment import RAW_FEATURE_COLUMNS, FeatureConfig
-from hft_lob.preprocessing.clean import SessionSegment
+from hft_lob.data_pipeline.clean import SessionSegment
 
 _SUPPORTED_DERIVED_FEATURES: tuple[str, ...] = (
     "spread",

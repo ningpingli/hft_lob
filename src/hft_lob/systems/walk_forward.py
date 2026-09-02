@@ -12,7 +12,7 @@ from typing import Protocol
 import numpy as np
 
 from hft_lob.configs.experiment import FoldSelectionConfig, ModelRunConfig
-from hft_lob.datasets.dataset_validator import DatasetPackage
+from hft_lob.data_pipeline.dataset_validator import DatasetPackage
 from hft_lob.metrics.metrics import EvaluationReport, build_evaluation_report
 from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
 from hft_lob.reporting.reporter import save_evaluation_outputs

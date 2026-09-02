@@ -7,8 +7,8 @@ import polars as pl
 import pytest
 
 from hft_lob.configs.experiment import TargetConfig
-from hft_lob.preprocessing.clean import SessionSegment
-from hft_lob.preprocessing.labels import LabelTransformer, horizon_label_column, label_columns
+from hft_lob.data_pipeline.clean import SessionSegment
+from hft_lob.data_pipeline.labels import LabelTransformer, horizon_label_column, label_columns
 
 
 def _segment() -> SessionSegment:

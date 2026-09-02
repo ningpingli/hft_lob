@@ -28,8 +28,8 @@ from hft_lob.configs.experiment import (
     WalkForwardConfig,
     WindowConfig,
 )
-from hft_lob.datasets.builder import build_dataset_package
-from hft_lob.datasets.dataset_validator import open_dataset_package
+from hft_lob.data_pipeline.builder import build_dataset_package
+from hft_lob.data_pipeline.dataset_validator import open_dataset_package
 from hft_lob.systems.baseline_manifest import load_default_manifest
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.model_bundle import load_model_bundle

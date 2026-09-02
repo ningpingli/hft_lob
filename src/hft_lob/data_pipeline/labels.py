@@ -7,7 +7,7 @@ from datetime import timedelta
 import polars as pl
 
 from hft_lob.configs.experiment import TargetConfig
-from hft_lob.preprocessing.clean import SessionSegment
+from hft_lob.data_pipeline.clean import SessionSegment
 
 _LABEL_TYPE_SHORT: dict[str, str] = {"log_mid_return": "log", "simple_mid_return": "simple"}
 

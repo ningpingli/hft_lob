@@ -11,7 +11,7 @@ import yaml
 
 from hft_lob.configs import load_model_config
 from hft_lob.configs.experiment import ModelRunConfig
-from hft_lob.datasets.dataset_validator import DatasetPackageMetadata
+from hft_lob.data_pipeline.dataset_validator import DatasetPackageMetadata
 from hft_lob.utils._yaml_io import atomic_dump_yaml
 
 MODEL_BUNDLE_SCHEMA_VERSION = 1
