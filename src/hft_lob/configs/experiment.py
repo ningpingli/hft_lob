@@ -157,8 +157,8 @@ class TrainingConfig:
     loss_huber_delta: float = 1.0
     epochs: int = 50
     patience: int = 10
-    monitor_metric: str = "val/ts_ic"
-    monitor_mode: str = "max"
+    monitor_metric: str = "val/mse"
+    monitor_mode: str = "min"
     learning_rate: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 1e-5
@@ -167,17 +167,17 @@ class TrainingConfig:
 
 @dataclass(frozen=True)
 class EvaluationConfig:
-    """评估指标（§21）：基础指标、Mean Daily IC、逐日曲线与时序分组收益曲线。"""
+    """固定评估契约：MSE、MAE、日级 IC 统计与两类诊断曲线。"""
 
-    metrics: tuple[str, ...] = (
-        "mae", "rmse", "ts_ic", "rank_ic", "direction_accuracy",
-        "up_precision", "up_recall", "down_precision", "down_recall",
-    )
-    report_daily: bool = True  # §14：daily metric mean/std/CI，显式处理序列相关
     prediction_bins: int = 10
-    confidence_level: float = 0.95
-    bootstrap_samples: int = 1_000
-    bootstrap_block_size: int = 20
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.prediction_bins, bool)
+            or not isinstance(self.prediction_bins, int)
+            or self.prediction_bins < 2
+        ):
+            raise ValueError("evaluation.prediction_bins must be an integer >= 2")
 
 
 @dataclass(frozen=True)

@@ -32,11 +32,7 @@ def _config() -> ModelRunConfig:
         loader=LoaderConfig(),
         model=ModelConfig(name="cnn1"),
         training=TrainingConfig(epochs=1),
-        evaluation=EvaluationConfig(
-            metrics=("mae", "ts_ic", "direction_accuracy"),
-            prediction_bins=2,
-            bootstrap_samples=2,
-        ),
+        evaluation=EvaluationConfig(prediction_bins=2),
     )
 
 
@@ -95,7 +91,7 @@ def test_validation_logs_epoch_metrics_and_clears_buffers() -> None:
     module.validation_step(_batch(), 0)
     module.on_validation_epoch_end()
 
-    assert {"val/loss", "val/mae", "val/ts_ic", "val/direction_accuracy"} <= logged.keys()
+    assert {"val/loss", "val/mse", "val/mae"} <= logged.keys()
     assert not module._validation_predictions
 
 

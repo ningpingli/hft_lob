@@ -115,7 +115,6 @@ def run_walk_forward(
             evaluation = build_evaluation_report(
                 run.artifact,
                 config.evaluation,
-                seed=config.seed + fold_index,
             )
             evaluation_outputs = save_evaluation_outputs(
                 evaluation,
