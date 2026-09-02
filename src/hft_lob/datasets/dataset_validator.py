@@ -132,8 +132,9 @@ class DatasetPackageMetadata:
             raise ValueError("labels must be non-empty and unique")
         if any(not isinstance(label, int) or isinstance(label, bool) or label <= 0 for label in labels):
             raise ValueError("labels must contain positive integers")
-        if len(labels) != len(self.target_columns):
-            raise ValueError("labels and target_columns must have the same length")
+        valid_target_columns = {tuple(f"Target_{label}s_{suffix}" for label in labels) for suffix in ("log", "simple")}
+        if self.target_columns not in valid_target_columns:
+            raise ValueError("target_columns must match labels in order and target type")
         if self.snapshot_interval_seconds <= 0 or self.history_snapshots <= 0:
             raise ValueError("snapshot_interval_seconds and history_snapshots must be > 0")
         if self.normalization_window < 2:

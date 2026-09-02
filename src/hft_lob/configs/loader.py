@@ -44,10 +44,10 @@ def load_data_config(config_path: str) -> DataBuildConfig:
         raise ValueError("config.task is required")
     sessions = _section(raw, "sessions")
     _tuple_field(sessions, "morning")
+    _tuple_field(sessions, "afternoon")
     features = _section(raw, "features")
     _tuple_field(features, "derived_features")
     target = _section(raw, "target")
-    _tuple_field(target, "label")
     split = _section(raw, "split")
     for name in ("train_dates", "validation_dates", "test_dates"):
         _tuple_field(split, name, allow_none=True)

@@ -30,7 +30,7 @@ def test_transform_matches_nearest_future_with_bounded_tolerance() -> None:
     transformer = LabelTransformer(
         TargetConfig(
             type="log_mid_return",
-            label=(60,),
+            label=[60],
             tolerance_seconds=3,
         )
     )
@@ -48,7 +48,7 @@ def test_transform_does_not_match_beyond_tolerance() -> None:
     transformer = LabelTransformer(
         TargetConfig(
             type="simple_mid_return",
-            label=(60,),
+            label=[60],
             tolerance_seconds=1,
         )
     )
@@ -63,15 +63,15 @@ def test_transform_does_not_match_beyond_tolerance() -> None:
 def test_label_columns_follow_configured_type_and_label_order() -> None:
     config = TargetConfig(
         type="simple_mid_return",
-        label=(120, 60),
+        label=[120, 60],
     )
 
-    assert horizon_label_column(config, 60) == "Target_60s_simple"
+    assert (config.label, horizon_label_column(config, 60)) == ([120, 60], "Target_60s_simple")
     assert label_columns(config) == ("Target_120s_simple", "Target_60s_simple")
 
 
 def test_transform_rejects_unsorted_timestamps() -> None:
-    transformer = LabelTransformer(TargetConfig(label=(60,)))
+    transformer = LabelTransformer(TargetConfig(label=[60]))
     segment = _segment()
 
     with pytest.raises(ValueError, match="timestamps must be sorted"):
@@ -90,7 +90,7 @@ def test_target_config_rejects_tolerance_that_can_reach_label() -> None:
     with pytest.raises(ValueError, match="smaller than label"):
         LabelTransformer(
             TargetConfig(
-                label=(60,),
+                label=[60],
                 tolerance_seconds=60,
             )
         )

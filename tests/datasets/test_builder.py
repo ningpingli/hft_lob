@@ -36,7 +36,7 @@ def _config(tmp_path: Path) -> DataBuildConfig:
             raw_dir=str(tmp_path / "raw"),
         ),
         cleaning=CleaningConfig(),
-        target=TargetConfig(label=(6,), tolerance_seconds=0),
+        target=TargetConfig(label=[12, 6], tolerance_seconds=0),
         sessions=SessionConfig(),
         window=WindowConfig(history_snapshots=2),
         features=FeatureConfig(),
@@ -95,7 +95,8 @@ def test_build_dataset_package_is_complete_and_idempotent(
     features, target, targets_by_horizon, sample = dataset[0]
     assert features.shape == (config.window.history_snapshots, len(RAW_FEATURE_COLUMNS))
     assert target.shape == (1,)
-    assert set(targets_by_horizon) == {6}
+    assert set(targets_by_horizon) == {12, 6}
+    assert target.item() == targets_by_horizon[12].item()
     assert sample.ticker == "TEST"
     module = LOBDataModule(
         open_dataset_package(first), fold_index=1, loader=LoaderConfig(), seed=42

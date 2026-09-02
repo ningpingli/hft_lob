@@ -92,5 +92,5 @@ def _metadata(
         source_hash=source_hash,
         processing_config_hash=sources.processing_hash,
         fold_plan_hash=fold_plan_hash,
-        labels=config.target.label,
+        labels=tuple(config.target.label),
     )

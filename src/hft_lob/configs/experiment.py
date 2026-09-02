@@ -58,11 +58,11 @@ class TargetConfig:
     """多 horizon 收益标签配置。"""
 
     type: str = "log_mid_return"
-    label: tuple[int, ...] = (60, 120, 300, 600)
+    label: list[int] = field(default_factory=lambda: [60, 120, 300, 600])
     tolerance_seconds: int = 3
 
     def __post_init__(self) -> None:
-        labels = tuple(self.label)
+        labels = list(self.label)
         if not labels or len(set(labels)) != len(labels):
             raise ValueError("label must be non-empty and unique")
         if any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in labels):

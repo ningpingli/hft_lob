@@ -137,6 +137,11 @@ def test_metadata_rejects_identity_mismatch() -> None:
 
     with pytest.raises(ValueError, match="does not match"):
         DatasetPackageMetadata.from_dict(value)
+    value = _metadata().to_dict()
+    value["labels"] = [60, 120]
+    value["target_columns"] = ["Target_120s_log", "Target_60s_log"]
+    with pytest.raises(ValueError, match="target_columns must match"):
+        DatasetPackageMetadata.from_dict(value)
 
 
 def test_validation_rejects_invalid_quality_contract(tmp_path: Path) -> None:

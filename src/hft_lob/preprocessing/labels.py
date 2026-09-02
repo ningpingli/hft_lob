@@ -115,15 +115,11 @@ class LabelTransformer:
                 .alias(simple_name),
             ).drop(target_timestamp, future_book_valid)
 
-        suffixes = tuple(f"{label}s" for label in self.config.label)
+        first_suffix = f"{self.config.label[0]}s"
         result = result.with_columns(
-            pl.coalesce([pl.col(f"future_timestamp_{suffix}") for suffix in suffixes]).alias(
-                "future_timestamp"
-            ),
-            pl.coalesce([pl.col(f"future_mid_{suffix}") for suffix in suffixes]).alias("future_mid"),
-            pl.any_horizontal(
-                [pl.col(f"target_valid_{suffix}") for suffix in suffixes]
-            ).alias("target_valid"),
+            pl.col(f"future_timestamp_{first_suffix}").alias("future_timestamp"),
+            pl.col(f"future_mid_{first_suffix}").alias("future_mid"),
+            pl.col(f"target_valid_{first_suffix}").alias("target_valid"),
         )
         return SessionSegment(
             trade_date=segment.trade_date,

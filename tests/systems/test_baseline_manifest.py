@@ -121,7 +121,7 @@ def _metadata() -> DatasetPackageMetadata:
         ),
         ticker=ticker,
         feature_columns=("f0", "f1", "f2", "f3"),
-        target_columns=("target",),
+        target_columns=("Target_60s_log",),
         labels=(60,),
         feature_dtype="float32",
         target_dtype="float32",
