@@ -206,8 +206,9 @@ uv run hft_lob train \
 
 不传 `--gpu-id` 时由 Lightning 自动选择设备。同一份只读数据集可以被多个训练进程或不同模型同时消费，但每个进程应使用不同的 `experiment-id`。
 
-训练中的验证集只计算快速标量指标 `val/mse` 和 `val/mae`，用于 checkpoint
-选择与 early stopping；不会生成预测 artifact、评测报告或曲线。测试集在训练结束后
+训练中的验证集计算 `val/mse`、`val/mae` 与按交易日等权聚合的
+`val/mean_daily_ic`，checkpoint 选择与 early stopping 以 `val/mean_daily_ic`
+为监控指标并取最大值；不会生成预测 artifact、评测报告或曲线。测试集在训练结束后
 单独运行完整评估，额外计算日级 IC、正 IC 日占比、预测分桶，并生成下方的
 `evaluation.yaml` 与两张诊断曲线。
 

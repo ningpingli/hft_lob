@@ -150,14 +150,14 @@ class BaselineConfig:
 
 @dataclass(frozen=True)
 class TrainingConfig:
-    """训练配置：验证阶段只使用快速的 val/mse 或 val/mae 监控。"""
+    """训练配置：验证阶段记录误差指标，并以 mean daily IC 监控。"""
 
     loss: str = "huber"
     loss_huber_delta: float = 1.0
     epochs: int = 50
     patience: int = 10
-    monitor_metric: str = "val/mse"
-    monitor_mode: str = "min"
+    monitor_metric: str = "val/mean_daily_ic"
+    monitor_mode: str = "max"
     learning_rate: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 1e-5

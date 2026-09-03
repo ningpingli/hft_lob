@@ -9,7 +9,7 @@ from torch import nn
 
 from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.data_types import LOBBatch, SampleMeta
-from hft_lob.metrics.metrics import VALIDATION_METRIC_NAMES
+from hft_lob.metrics.metrics import VALIDATION_METRIC_NAMES, daily_ic_records, mean_daily_ic
 from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.trainner.losses import build_loss
 
@@ -60,6 +60,9 @@ class LOBLightningModule(L.LightningModule):
         self._validation_mse_sum: torch.Tensor | None = None
         self._validation_mae_sum: torch.Tensor | None = None
         self._validation_element_count = 0
+        self._validation_predictions: list[torch.Tensor] = []
+        self._validation_targets: list[torch.Tensor] = []
+        self._validation_trade_dates: list[str] = []
         self._test_predictions: list[torch.Tensor] = []
         self._test_targets: list[torch.Tensor] = []
         self._test_metadata: list[SampleMeta] = []
@@ -110,7 +113,7 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_start(self) -> None:
-        """开始轻量验证，只初始化 MSE/MAE 的流式累加器。"""
+        """开始验证，初始化误差与日级 IC 的聚合器。"""
         self._reset_validation_metrics()
 
     def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
@@ -128,6 +131,9 @@ class LOBLightningModule(L.LightningModule):
             else self._validation_mae_sum + errors.abs().sum()
         )
         self._validation_element_count += errors.numel()
+        self._validation_predictions.append(predictions.detach().cpu())
+        self._validation_targets.append(targets.detach().cpu())
+        self._validation_trade_dates.extend(meta.trade_date for meta in batch.metadata)
         self.log(
             "val/loss",
             loss,
@@ -140,14 +146,30 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self) -> None:
-        """只记录快速标量验证指标，不生成测试报告或曲线数据。"""
+        """记录验证误差与 mean daily IC，不生成测试报告或曲线数据。"""
         if self._validation_element_count == 0:
             return
-        if self._validation_mse_sum is None or self._validation_mae_sum is None:
+        if (
+            self._validation_mse_sum is None
+            or self._validation_mae_sum is None
+            or not self._validation_predictions
+            or not self._validation_targets
+        ):
             raise RuntimeError("validation metric accumulators are incomplete")
+
+        predictions = torch.cat(self._validation_predictions).numpy()
+        targets = torch.cat(self._validation_targets).numpy()
+        trade_dates = np.asarray(self._validation_trade_dates, dtype=object)
+        daily_ic = daily_ic_records(
+            predictions.T.reshape(-1),
+            targets.T.reshape(-1),
+            np.tile(trade_dates, self.target_count),
+        )
+        daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
         metrics = {
             "mse": self._validation_mse_sum / self._validation_element_count,
             "mae": self._validation_mae_sum / self._validation_element_count,
+            "mean_daily_ic": self._validation_mse_sum.new_tensor(mean_daily_ic(daily_values)),
         }
         for name in VALIDATION_METRIC_NAMES:
             self.log(
@@ -155,15 +177,26 @@ class LOBLightningModule(L.LightningModule):
                 metrics[name],
                 on_step=False,
                 on_epoch=True,
-                prog_bar=name == "mse",
+                prog_bar=False,
                 sync_dist=True,
             )
+        self.log(
+            "val/mean_daily_ic",
+            metrics["mean_daily_ic"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
         self._reset_validation_metrics()
 
     def _reset_validation_metrics(self) -> None:
         self._validation_mse_sum = None
         self._validation_mae_sum = None
         self._validation_element_count = 0
+        self._validation_predictions.clear()
+        self._validation_targets.clear()
+        self._validation_trade_dates.clear()
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)

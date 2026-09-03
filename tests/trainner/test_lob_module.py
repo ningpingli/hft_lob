@@ -82,7 +82,7 @@ def test_training_and_optimizer_contract() -> None:
     assert isinstance(optimizer, torch.optim.AdamW)
 
 
-def test_validation_logs_only_fast_metrics_and_clears_accumulators() -> None:
+def test_validation_logs_error_metrics_and_mean_daily_ic() -> None:
     module = _module()
     batch = _batch()
     expected = module(batch.features).detach()
@@ -93,16 +93,21 @@ def test_validation_logs_only_fast_metrics_and_clears_accumulators() -> None:
     module.validation_step(batch, 0)
     module.on_validation_epoch_end()
 
-    assert set(logged) == {"val/loss", "val/mse", "val/mae"}
+    assert set(logged) == {"val/loss", "val/mse", "val/mae", "val/mean_daily_ic"}
     assert logged["val/mse"].item() == pytest.approx(
         torch.mean((expected - batch.targets).square()).item()
     )
     assert logged["val/mae"].item() == pytest.approx(
         torch.mean((expected - batch.targets).abs()).item()
     )
+    expected_ic = torch.corrcoef(torch.stack((expected[:, 0], batch.targets[:, 0])))[0, 1].item()
+    assert logged["val/mean_daily_ic"].item() == pytest.approx(expected_ic)
     assert module._validation_element_count == 0
     assert module._validation_mse_sum is None
     assert module._validation_mae_sum is None
+    assert module._validation_predictions == []
+    assert module._validation_targets == []
+    assert module._validation_trade_dates == []
 
 def test_test_uses_complete_artifact_contract() -> None:
     module = _module()

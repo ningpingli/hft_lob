@@ -1,4 +1,4 @@
-"""验证集只计算快速标量误差；测试集额外计算 IC、分桶与诊断曲线。"""
+"""验证集记录标量误差与 mean daily IC；测试集额外计算完整 IC 报告。"""
 
 from __future__ import annotations
 

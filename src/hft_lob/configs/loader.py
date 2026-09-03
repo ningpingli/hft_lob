@@ -185,10 +185,10 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("seed must be an integer in [0, 2**32)")
     if config.model.name.strip() == "":
         raise ValueError("model.name must not be empty")
-    if config.training.monitor_metric not in {"val/mse", "val/mae"}:
-        raise ValueError("training.monitor_metric must be 'val/mse' or 'val/mae'")
-    if config.training.monitor_mode != "min":
-        raise ValueError("training.monitor_mode must be 'min' for error metrics")
+    if config.training.monitor_metric != "val/mean_daily_ic":
+        raise ValueError("training.monitor_metric must be 'val/mean_daily_ic'")
+    if config.training.monitor_mode != "max":
+        raise ValueError("training.monitor_mode must be 'max' for mean daily IC")
     if len(config.training.betas) != 2 or any(
         isinstance(beta, bool) or not isinstance(beta, (int, float)) or not 0 <= beta < 1
         for beta in config.training.betas
