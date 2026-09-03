@@ -1,4 +1,4 @@
-"""Standalone evaluation of one trained model on a compatible test dataset."""
+"""独立评测自包含模型。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class StandaloneTestRequest:
-    """Inputs required to evaluate one self-contained trained-model directory."""
+    """评测一个自包含模型目录所需的输入。"""
 
     test_data_dir: str
     model_name: str
@@ -18,6 +18,8 @@ class StandaloneTestRequest:
 
 @dataclass(frozen=True)
 class StandaloneTestResult:
+    """独立测试完成后返回的最小结果。"""
+
     model_name: str
     model_version: str
     dataset_version: str
@@ -28,7 +30,7 @@ class StandaloneTestResult:
 
 
 def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
-    """Load a recorded checkpoint and evaluate it without fitting or checkpoint selection."""
+    """加载已记录的 checkpoint 评测，不训练也不重新选择 checkpoint。"""
     if not request.model_name.strip():
         raise ValueError("model_name must not be empty")
     import lightning.pytorch as L

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from hft_lob.cli.baseline import BaselineRunResult
+from hft_lob.application.baseline import BaselineRunResult
+from hft_lob.application.standalone_test import StandaloneTestResult
+from hft_lob.application.train import TrainingResult
 from hft_lob.cli.main import main, parse_args
-from hft_lob.cli.test import StandaloneTestResult
-from hft_lob.cli.train import TrainingResult
 
 
 def test_parse_training_cli_requires_dataset() -> None:

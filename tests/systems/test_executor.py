@@ -6,8 +6,8 @@ from pathlib import Path
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from hft_lob.cli.baseline import BaselineRunRequest, run_baseline_application
-from hft_lob.cli.test import StandaloneTestRequest, run_standalone_test
+from hft_lob.application.baseline import BaselineRunRequest, run_baseline_application
+from hft_lob.application.standalone_test import StandaloneTestRequest, run_standalone_test
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
     CleaningConfig,

@@ -1,4 +1,4 @@
-"""训练应用服务：集中组装配置、数据包、实验环境与 walk-forward。"""
+"""训练应用服务：组装配置、数据包、实验环境与 walk-forward。"""
 
 from __future__ import annotations
 

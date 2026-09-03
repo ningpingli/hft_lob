@@ -1,4 +1,4 @@
-"""Application service for dataset-level shared baseline experiments."""
+"""数据集级共享 baseline 应用用例。"""
 
 from __future__ import annotations
 
