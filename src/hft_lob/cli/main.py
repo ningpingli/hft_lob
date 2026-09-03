@@ -27,6 +27,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     build = data_commands.add_parser("build")
     build.add_argument("--config", required=True)
     build.add_argument("--output-root", required=True)
+    build.add_argument("--baseline-config", default="configs/baselines.yaml")
+    build.add_argument("--baseline-experiment-id")
+    build.add_argument("--baseline-seed", type=int)
+    build.add_argument("--baseline-replace-default", action="store_true")
+    build.add_argument("--skip-baseline", action="store_true")
     for name in ("verify", "inspect"):
         command = data_commands.add_parser(name)
         command.add_argument("--dataset-dir", required=True)
@@ -105,6 +110,18 @@ def _run_data_command(args: argparse.Namespace) -> None:
     if args.data_command == "build":
         package = build_dataset(DatasetBuildRequest(args.config, args.output_root))
         print(package)
+        if args.skip_baseline:
+            return
+        baseline_result = run_baseline_application(
+            BaselineRunRequest(
+                config_path=args.baseline_config,
+                dataset_dir=str(package),
+                experiment_id=args.baseline_experiment_id,
+                seed=args.baseline_seed,
+                replace_default=args.baseline_replace_default,
+            )
+        )
+        print(f"baseline_manifest={baseline_result.manifest_path}")
         return
     if args.data_command == "verify":
         metadata = verify_dataset(args.dataset_dir)

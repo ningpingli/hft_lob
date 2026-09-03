@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from hft_lob.application.baseline import BaselineRunResult
 from hft_lob.application.train import TrainingResult
 from hft_lob.cli.main import main, parse_args
 
@@ -108,3 +109,48 @@ def test_main_passes_dataset_directly_to_training(
     request = seen["request"]
     assert request.dataset_dir == str(dataset_dir)  # type: ignore[union-attr]
     assert request.experiment_id == "cli-training"  # type: ignore[union-attr]
+
+
+def test_data_build_runs_baseline_after_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[tuple[str, object]] = []
+
+    def fake_build(request: object) -> Path:
+        events.append(("build", request))
+        return Path("published/dataset-id")
+
+    def fake_baseline(request: object) -> BaselineRunResult:
+        events.append(("baseline", request))
+        return BaselineRunResult("baseline-1", "dataset-id", 1, "manifest.yaml")
+
+    main_module = importlib.import_module("hft_lob.cli.main")
+    monkeypatch.setattr(main_module, "build_dataset", fake_build)
+    monkeypatch.setattr(main_module, "run_baseline_application", fake_baseline)
+
+    main(
+        [
+            "data",
+            "build",
+            "--config",
+            "data.yaml",
+            "--output-root",
+            "published",
+            "--baseline-config",
+            "configs/baselines.yaml",
+            "--baseline-experiment-id",
+            "baseline-1",
+            "--baseline-seed",
+            "7",
+            "--baseline-replace-default",
+        ]
+    )
+
+    assert [name for name, _ in events] == ["build", "baseline"]
+    build_request = events[0][1]
+    baseline_request = events[1][1]
+    assert build_request.config_path == "data.yaml"  # type: ignore[union-attr]
+    assert build_request.output_root == "published"  # type: ignore[union-attr]
+    assert baseline_request.config_path == "configs/baselines.yaml"  # type: ignore[union-attr]
+    assert baseline_request.dataset_dir == str(Path("published") / "dataset-id")  # type: ignore[union-attr]
+    assert baseline_request.experiment_id == "baseline-1"  # type: ignore[union-attr]
+    assert baseline_request.seed == 7  # type: ignore[union-attr]
+    assert baseline_request.replace_default is True  # type: ignore[union-attr]

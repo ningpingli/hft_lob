@@ -70,7 +70,16 @@ uv run hft_lob data build `
 uv run hft_lob data build --config configs/dataset.yaml --output-root data/datasets/688981
 ```
 
-构建结果会输出到 `data/datasets/688981/<dataset_id>/`。验证构建结果：
+`data build` 成功发布数据集后会自动运行共享 Ridge baseline，并输出 baseline manifest。只需要数据集、不运行 baseline 时可显式跳过：
+
+```powershell
+uv run hft_lob data build `
+  --config configs/dataset.yaml `
+  --output-root data/datasets/688981 `
+  --skip-baseline
+```
+
+构建结果会输出到 `data/datasets/688981/<dataset_id>/`，同时生成 `loggers/results/baselines/<dataset_id>/default_manifest.yaml`。验证构建结果：
 
 ```powershell
 uv run hft_lob data verify `
@@ -103,6 +112,8 @@ data/datasets/688981/<dataset_id>/
 └── _SUCCESS
 ```
 
+baseline 已在数据集发布后自动完成；如果 baseline 配置 hash 未变化，重复执行会复用已有 default manifest，文件位于 `loggers/results/<dataset_id>/baseline/manifest.yaml`。
+
 数据集发布后应保持只读。需要完整检查时运行：
 
 ```bash
@@ -115,9 +126,9 @@ uv run hft_lob data verify --dataset-dir data/datasets/688981/<dataset_id>
 uv run hft_lob data inspect --dataset-dir data/datasets/688981/<dataset_id>
 ```
 
-## 阶段二：共享 Ridge baseline 实验
+## 阶段二：共享 Ridge baseline（可单独重跑）
 
-Ridge baseline 必须先于模型实验生成；一次 baseline 实验覆盖选定的 walk-forward fold：
+通常无需手动执行 baseline。需要使用不同配置或重新发布 default manifest 时，可以单独运行：
 
 ```bash
 uv run hft_lob baseline run \
