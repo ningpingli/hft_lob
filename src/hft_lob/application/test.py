@@ -129,4 +129,4 @@ def _resolve_output_dir(
         if not request.output_dir.strip():
             raise ValueError("output_dir must be None or a non-empty path")
         return Path(request.output_dir).resolve()
-    return (Path("loggers/results/standalone_test") / model_version / dataset_version).resolve()
+    return (Path("output/standalone_test") / model_version / dataset_version).resolve()

@@ -199,7 +199,7 @@ uv run hft_lob train \
 模型训练结果保存在：
 
 ```text
-loggers/results/<experiment_id>/
+output/<experiment_id>/
 ├── config_used.yaml
 └── walk_forward/
     └── fold_001/
@@ -220,7 +220,7 @@ loggers/results/<experiment_id>/
 uv run hft_lob test \
   --test-data-dir data/datasets/688981/<test_dataset_id> \
   --model-name cnn1 \
-  --model-dir loggers/results/<experiment_id>/walk_forward/fold_001/cnn1
+  --model-dir output/<experiment_id>/walk_forward/fold_001/cnn1
 ```
 
 使用刚训练的 DeepLOB checkpoint 进行独立测试：
@@ -229,12 +229,12 @@ uv run hft_lob test \
 uv run hft_lob test \
   --test-data-dir data/datasets/688981/<test_dataset_id> \
   --model-name deeplob \
-  --model-dir loggers/results/deeplob-688981/walk_forward/fold_001/deeplob \
-  --output-dir loggers/results/deeplob-688981/standalone_test
+  --model-dir output/deeplob-688981/walk_forward/fold_001/deeplob \
+  --output-dir output/deeplob-688981/standalone_test
 ```
 
 可通过 `--output-dir` 指定输出位置；默认写入
-`loggers/results/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
+`output/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
 与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致，
 且必须包含 `model_metadata.yaml` 中 `fold_index` 对应的 test split（评测在该 fold
 定义的测试窗口上进行，不会用新划分训练或验证）。命令严格加载训练生成的 Lightning
@@ -243,7 +243,7 @@ checkpoint，只运行 test，不训练或重新选择 checkpoint。
 共享 baseline 结果和权威引用保存在数据集实验空间：
 
 ```text
-loggers/results/<dataset_id>/baseline/
+output/<dataset_id>/baseline/
 ├── manifest.yaml
 └── runs/
     └── <baseline_run_id>/

@@ -17,8 +17,8 @@ import yaml
 
 from hft_lob.utils._yaml_io import atomic_dump_yaml
 
-#: 结果根目录（cwd 相对）。
-_RESULTS_ROOT = os.path.join("loggers", "results")
+#: 输出根目录（cwd 相对）。
+_RESULTS_ROOT = "output"
 
 def generate_experiment_id(model_name: str, ticker: str) -> str:
     """生成新实验 ID：``<ticker>_<model>_<YYYY-MM-DD_HH_MM_SS>_<7位随机>``，
@@ -41,7 +41,7 @@ def generate_experiment_id(model_name: str, ticker: str) -> str:
 
 
 def resolve_log_dir(experiment_id: str) -> str:
-    """实验结果目录：``loggers/results/<experiment_id>``。"""
+    """实验结果目录：``output/<experiment_id>``。"""
     _validate_path_component(experiment_id, field="experiment_id")
     return os.path.join(_RESULTS_ROOT, experiment_id)
 
@@ -70,7 +70,7 @@ def resolve_experiment_id(
 
 
 def write_experiment_log(experiment_id: str, header: str, contents: dict[str, Any]) -> None:
-    """将阶段结果记录到 ``loggers/results/<experiment_id>/data.yaml``。
+    """将阶段结果记录到 ``output/<experiment_id>/data.yaml``。
 
     文件已存在时按 header 键合并，否则创建新文件（§29 结果可追踪）。
 
