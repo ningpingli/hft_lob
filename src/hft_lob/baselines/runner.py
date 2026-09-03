@@ -9,8 +9,8 @@ import numpy as np
 import torch
 
 from hft_lob.baselines.base import BaselineModel
+from hft_lob.data_types import LOBBatch, SampleMeta
 from hft_lob.reporting.artifact import PredictionArtifact
-from hft_lob.systems.contracts import LOBBatch, SampleMeta
 
 
 @dataclass

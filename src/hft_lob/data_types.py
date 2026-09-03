@@ -1,4 +1,4 @@
-"""模型、DataLoader、预测 artifact 共用的数据契约。"""
+"""跨数据集、模型、baseline 与报告层共享的底层数据类型。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import torch
 
 @dataclass(frozen=True)
 class SampleMeta:
+    """单个样本的市场时间与盘口元数据。"""
+
     ticker: str
     trade_date: str
     session_id: str
@@ -21,6 +23,8 @@ class SampleMeta:
 
 @dataclass(frozen=True)
 class LOBBatch:
+    """DataLoader 交给模型或 baseline 的一个批次。"""
+
     features: torch.Tensor
     targets: torch.Tensor
     metadata: tuple[SampleMeta, ...]

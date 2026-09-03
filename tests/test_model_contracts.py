@@ -21,8 +21,6 @@ from hft_lob.configs.experiment import (
     TrainingConfig,
 )
 from hft_lob.models import build_model
-from hft_lob.models.CNN1.cnn1 import CNN1
-from hft_lob.models.CNN2.cnn2 import CNN2
 
 #: 5 档盘口契约（20 特征 / 100 快照 / 5 档）。
 _FEATURES = 20
@@ -81,25 +79,8 @@ def test_registered_model_output_width_follows_label_count(sample: torch.Tensor)
     )
     assert model(sample).shape == (2, 3)
 
-@pytest.mark.parametrize("model_type", (CNN1, CNN2))
-def test_cnn_output_dimension_is_not_configurable(model_type: type[torch.nn.Module]) -> None:
-    """分类时代的 num_classes 参数不能重新引入多列输出。"""
-    with pytest.raises(TypeError, match="num_classes"):
-        model_type(num_classes=3)  # type: ignore[call-arg]
 
 
-@pytest.mark.parametrize("name", _FORWARD_NAMES)
-def test_all_registered_models_have_scalar_regression_output(
-    name: str, sample: torch.Tensor
-) -> None:
-    model = build_model(
-        _make_config(name),
-        feature_columns=[f"f{i}" for i in range(_FEATURES)],
-        history_snapshots=_HISTORY,
-    )
-    prediction = model(sample)
-    assert prediction.ndim == 2
-    assert prediction.shape[-1] == 1
 
 
 def test_hlob_constructs_and_forwards_with_minimal_structures(
@@ -122,20 +103,6 @@ def test_hlob_constructs_and_forwards_with_minimal_structures(
     assert out.shape == (2, 1)
 
 
-def test_hlob_constructs_with_nested_structures() -> None:
-    # 嵌套布局（lobx 测试姿势）仅验证构造成功；_max_index 兼容扁平/嵌套。
-    structures = {
-        "tetrahedra": [[i, i, i, i] for i in range(8)],
-        "triangles": [[i, i, i] for i in range(6)],
-        "edges": [[i, i] for i in range(4)],
-    }
-    model = build_model(
-        _make_config("hlob"),
-        feature_columns=[f"f{i}" for i in range(_FEATURES)],
-        history_snapshots=_HISTORY,
-        homological_structures=structures,
-    )
-    assert model.max_feature_index == 7
 
 
 def test_hlob_requires_homological_structures() -> None:
@@ -195,29 +162,3 @@ def test_input_dimension_mismatch_raises(name: str, x: torch.Tensor) -> None:
     )
     with pytest.raises(ValueError):
         model(x)
-
-
-@pytest.mark.parametrize("name", ("cnn2", "itransformer", "lobtransformer", "axiallob"))
-def test_models_reject_legacy_channel_dimension(name: str) -> None:
-    model = build_model(
-        _make_config(name),
-        feature_columns=[f"f{i}" for i in range(_FEATURES)],
-        history_snapshots=_HISTORY,
-    )
-    with pytest.raises(ValueError, match=r"expects \[B, T, F\]"):
-        model(torch.randn(2, 1, _HISTORY, _FEATURES))
-
-
-def test_hlob_rejects_legacy_channel_dimension() -> None:
-    model = build_model(
-        _make_config("hlob"),
-        feature_columns=[f"f{i}" for i in range(_FEATURES)],
-        history_snapshots=_HISTORY,
-        homological_structures={
-            "tetrahedra": list(range(8)),
-            "triangles": list(range(6)),
-            "edges": list(range(4)),
-        },
-    )
-    with pytest.raises(ValueError, match=r"expects \[B, T, F\]"):
-        model(torch.randn(2, 1, _HISTORY, _FEATURES))

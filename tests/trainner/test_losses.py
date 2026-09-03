@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import nn
 
-from hft_lob.systems.losses import build_loss
+from hft_lob.trainner.losses import build_loss
 
 
 @pytest.mark.parametrize(

@@ -12,7 +12,7 @@ from typing import cast
 import numpy as np
 import polars as pl
 
-from hft_lob.systems.contracts import SampleMeta
+from hft_lob.data_types import SampleMeta
 
 _ARTIFACT_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "model_name": pl.String,

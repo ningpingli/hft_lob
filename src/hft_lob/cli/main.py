@@ -14,7 +14,7 @@ from hft_lob.application.dataset import (
     inspect_dataset,
     verify_dataset,
 )
-from hft_lob.application.standalone_test import StandaloneTestRequest, run_standalone_test
+from hft_lob.application.test import StandaloneTestRequest, run_standalone_test
 from hft_lob.application.train import TrainingRequest, run_training_application
 
 

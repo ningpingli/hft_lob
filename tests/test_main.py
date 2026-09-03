@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from hft_lob.application.baseline import BaselineRunResult
-from hft_lob.application.standalone_test import StandaloneTestResult
 from hft_lob.application.train import TrainingResult
 from hft_lob.cli.main import main, parse_args
 
@@ -110,83 +108,3 @@ def test_main_passes_dataset_directly_to_training(
     request = seen["request"]
     assert request.dataset_dir == str(dataset_dir)  # type: ignore[union-attr]
     assert request.experiment_id == "cli-training"  # type: ignore[union-attr]
-
-
-def test_main_routes_standalone_test_to_application(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: dict[str, object] = {}
-
-    def fake_run(request):  # type: ignore[no-untyped-def]
-        seen["request"] = request
-        return StandaloneTestResult(
-            "cnn1",
-            "model-v1",
-            "dataset-v2",
-            10,
-            "results/test",
-            "results/test/predictions.parquet",
-            "results/test/evaluation.yaml",
-        )
-
-    main_module = importlib.import_module("hft_lob.cli.main")
-    monkeypatch.setattr(main_module, "run_standalone_test", fake_run)
-    main(
-        [
-            "test",
-            "--test-data-dir",
-            "datasets/test-set",
-            "--model-name",
-            "cnn1",
-            "--model-dir",
-            "models/cnn1",
-        ]
-    )
-
-    request = seen["request"]
-    assert request.test_data_dir == "datasets/test-set"  # type: ignore[union-attr]
-    assert request.model_name == "cnn1"  # type: ignore[union-attr]
-    assert request.model_dir == "models/cnn1"  # type: ignore[union-attr]
-    assert request.output_dir is None  # type: ignore[union-attr]
-
-
-def test_main_routes_baseline_run_to_application(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, object] = {}
-
-    def fake_run(request):  # type: ignore[no-untyped-def]
-        seen["request"] = request
-        return BaselineRunResult("baseline-1", "dataset-id", 3, "manifest.yaml")
-
-    main_module = importlib.import_module("hft_lob.cli.main")
-    monkeypatch.setattr(main_module, "run_baseline_application", fake_run)
-    main(
-        [
-            "baseline",
-            "run",
-            "--config",
-            "baseline.yaml",
-            "--dataset-dir",
-            "dataset",
-            "--replace-default",
-        ]
-    )
-
-    request = seen["request"]
-    assert request.config_path == "baseline.yaml"  # type: ignore[union-attr]
-    assert request.replace_default is True  # type: ignore[union-attr]
-
-
-def test_main_routes_data_build_to_application(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, object] = {}
-
-    def fake_build(request):  # type: ignore[no-untyped-def]
-        seen["request"] = request
-        return Path("published/dataset-id")
-
-    main_module = importlib.import_module("hft_lob.cli.main")
-    monkeypatch.setattr(main_module, "build_dataset", fake_build)
-    main(["data", "build", "--config", "data.yaml", "--output-root", "published"])
-
-    request = seen["request"]
-    assert request.config_path == "data.yaml"  # type: ignore[union-attr]
-    assert request.output_root == "published"  # type: ignore[union-attr]

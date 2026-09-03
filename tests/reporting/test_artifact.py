@@ -6,12 +6,12 @@ import numpy as np
 import polars as pl
 import pytest
 
+from hft_lob.data_types import SampleMeta
 from hft_lob.reporting.artifact import (
     PredictionArtifact,
     load_prediction_artifact,
     save_prediction_artifact,
 )
-from hft_lob.systems.contracts import SampleMeta
 
 
 def _metadata() -> tuple[SampleMeta, ...]:

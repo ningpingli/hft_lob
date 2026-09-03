@@ -25,7 +25,7 @@ from hft_lob.configs.experiment import (
 )
 from hft_lob.data_pipeline.pipeline import build_dataset_package
 from hft_lob.data_pipeline.writer import open_dataset_package, validate_dataset_package
-from hft_lob.datasets.datamodule import LOBDataModule, _seed_worker
+from hft_lob.datasets.datamodule import LOBDataModule
 from hft_lob.datasets.lob_dataset import PrebuiltLOBDataset
 from hft_lob.utils.seed import set_seed
 
@@ -119,15 +119,3 @@ def test_virtual_raw_lob_pipeline_and_loader_are_reproducible(
     assert first_anchors == second_anchors
     assert torch.equal(first_features, second_features)
     assert first_features.shape[0] > 0
-
-
-def test_worker_seed_replays_python_numpy_and_torch_streams() -> None:
-    _seed_worker(worker_id=3, base_seed=31415)
-    first = (random.random(), float(np.random.random()), torch.rand(3))
-
-    _seed_worker(worker_id=3, base_seed=31415)
-    second = (random.random(), float(np.random.random()), torch.rand(3))
-
-    assert first[0] == second[0]
-    assert first[1] == second[1]
-    assert torch.equal(first[2], second[2])

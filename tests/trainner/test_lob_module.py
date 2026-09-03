@@ -13,8 +13,8 @@ from hft_lob.configs.experiment import (
     ModelRunConfig,
     TrainingConfig,
 )
-from hft_lob.modules.lob_module import LOBLightningModule
-from hft_lob.systems.contracts import LOBBatch, SampleMeta
+from hft_lob.data_types import LOBBatch, SampleMeta
+from hft_lob.trainner.lob_module import LOBLightningModule
 
 
 class MeanModel(nn.Module):

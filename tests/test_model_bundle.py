@@ -18,7 +18,7 @@ from hft_lob.data_pipeline.writer import (
     DatasetPackageMetadata,
     compute_dataset_id,
 )
-from hft_lob.systems.model_bundle import (
+from hft_lob.models.bundle import (
     MODEL_CONFIG_FILENAME,
     MODEL_METADATA_FILENAME,
     load_model_bundle,

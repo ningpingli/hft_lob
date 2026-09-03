@@ -38,14 +38,14 @@ def run_standalone_test(request: StandaloneTestRequest) -> StandaloneTestResult:
     from hft_lob.data_pipeline.writer import fold_index_path, load_dataset_package
     from hft_lob.datasets.datamodule import LOBDataModule
     from hft_lob.metrics.metrics import build_evaluation_report
-    from hft_lob.models.lob_model import build_model
-    from hft_lob.modules.lob_module import LOBLightningModule
-    from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
-    from hft_lob.reporting.reporter import save_evaluation_outputs
-    from hft_lob.systems.model_bundle import (
+    from hft_lob.models.bundle import (
         load_model_bundle,
         validate_model_data_contract,
     )
+    from hft_lob.models.lob_model import build_model
+    from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
+    from hft_lob.reporting.reporter import save_evaluation_outputs
+    from hft_lob.trainner.lob_module import LOBLightningModule
 
     bundle = load_model_bundle(request.model_dir)
     if request.model_name != bundle.metadata.model_name:

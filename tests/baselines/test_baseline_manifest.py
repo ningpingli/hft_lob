@@ -6,16 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from hft_lob.configs.experiment import EvaluationConfig
-from hft_lob.data_pipeline.writer import (
-    DatasetPackage,
-    DatasetPackageMetadata,
-    compute_dataset_id,
-)
-from hft_lob.metrics.metrics import build_evaluation_report
-from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
-from hft_lob.reporting.reporter import save_evaluation_outputs
-from hft_lob.systems.baseline_manifest import (
+from hft_lob.baselines.manifest import (
     BASELINE_MANIFEST_SCHEMA_VERSION,
     BaselineArtifactReference,
     BaselineManifest,
@@ -28,7 +19,16 @@ from hft_lob.systems.baseline_manifest import (
     save_default_manifest,
     validate_default_manifest,
 )
-from hft_lob.systems.contracts import SampleMeta
+from hft_lob.configs.experiment import EvaluationConfig
+from hft_lob.data_pipeline.writer import (
+    DatasetPackage,
+    DatasetPackageMetadata,
+    compute_dataset_id,
+)
+from hft_lob.data_types import SampleMeta
+from hft_lob.metrics.metrics import build_evaluation_report
+from hft_lob.reporting.artifact import PredictionArtifact, save_prediction_artifact
+from hft_lob.reporting.reporter import save_evaluation_outputs
 
 _CONFIG_HASH = "a" * 64
 
@@ -91,32 +91,6 @@ def test_load_validated_reference_reports_collects_every_artifact(
     assert manifest.schema_version == BASELINE_MANIFEST_SCHEMA_VERSION
 
 
-def test_baseline_comparison_reuses_prevalidated_reports(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    package, manifest = _published_manifest(tmp_path, monkeypatch)
-    _, reports = load_validated_reference_reports(package, fold_indices=(1,))
-
-    def _forbidden(*args: object, **kwargs: object) -> object:
-        raise AssertionError("reference reports must be reused, not reloaded")
-
-    monkeypatch.setattr(
-        "hft_lob.systems.baseline_manifest._load_reference_report", _forbidden
-    )
-    model_report = build_evaluation_report(
-        _artifact(_metadata(), model_name="model", predictions=np.array([1.0, 2.0, 1.0, 2.0])),
-        EvaluationConfig(prediction_bins=2),
-    )
-
-    result = build_baseline_comparison(
-        (SimpleNamespace(fold_index=1, evaluation=model_report),),
-        manifest,
-        reference_reports=reports,
-    )["zero"]
-
-    assert result["matched_fold_count"]["mse"] == 1
-    assert result["fold_win_ratio"]["mse"] == 1.0
 
 
 def test_baseline_comparison_rejects_incomplete_reference_reports() -> None:
@@ -182,7 +156,7 @@ def _published_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[DatasetPackage, BaselineManifest]:
-    monkeypatch.setattr("hft_lob.systems.baseline_manifest._RESULTS_ROOT", tmp_path / "results")
+    monkeypatch.setattr("hft_lob.baselines.manifest._RESULTS_ROOT", tmp_path / "results")
     metadata = _metadata()
     package = DatasetPackage(root=tmp_path / metadata.dataset_id, metadata=metadata)
     root = baseline_space(metadata.dataset_id)

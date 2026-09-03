@@ -7,7 +7,8 @@ import polars as pl
 from polars.testing import assert_frame_equal
 
 from hft_lob.application.baseline import BaselineRunRequest, run_baseline_application
-from hft_lob.application.standalone_test import StandaloneTestRequest, run_standalone_test
+from hft_lob.application.test import StandaloneTestRequest, run_standalone_test
+from hft_lob.baselines.manifest import load_default_manifest
 from hft_lob.configs.experiment import (
     RAW_FEATURE_COLUMNS,
     CleaningConfig,
@@ -30,10 +31,9 @@ from hft_lob.configs.experiment import (
 )
 from hft_lob.data_pipeline.pipeline import build_dataset_package
 from hft_lob.data_pipeline.writer import open_dataset_package
-from hft_lob.systems.baseline_manifest import load_default_manifest
-from hft_lob.systems.executor import DefaultWalkForwardExecutor
-from hft_lob.systems.model_bundle import load_model_bundle
-from hft_lob.systems.walk_forward import run_walk_forward
+from hft_lob.models.bundle import load_model_bundle
+from hft_lob.trainner.executor import DefaultWalkForwardExecutor
+from hft_lob.trainner.walk_forward import run_walk_forward
 
 
 def test_default_executor_trains_cnn_and_writes_prediction_artifact(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_baseline_run_publishes_dataset_manifest(
         _write_raw(tmp_path, date, day)
     dataset_dir = build_dataset_package(data_config, tmp_path / "prebuilt")
     monkeypatch.setattr(
-        "hft_lob.systems.baseline_manifest._RESULTS_ROOT",
+        "hft_lob.baselines.manifest._RESULTS_ROOT",
         tmp_path / "results",
     )
 
