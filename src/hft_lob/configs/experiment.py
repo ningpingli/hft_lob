@@ -140,9 +140,9 @@ class ModelConfig:
 
 @dataclass(frozen=True)
 class BaselineConfig:
-    """MVP 基线（§17）：Zero / Imbalance / Ridge。"""
+    """唯一支持的 baseline 配置：Ridge。"""
 
-    names: tuple[str, ...] = ("zero", "imbalance", "ridge")
+    names: tuple[str, ...] = ("ridge",)
     ridge_alpha: float = 1.0
 
 
@@ -248,7 +248,7 @@ class FoldSelectionConfig:
 
 @dataclass(frozen=True)
 class BaselineRunConfig:
-    """共享 baseline 实验配置：一次覆盖全部 baseline 与选定 fold。"""
+    """共享 Ridge baseline 实验配置：覆盖选定 fold。"""
 
     experiment_id: str
     loader: LoaderConfig

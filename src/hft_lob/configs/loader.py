@@ -202,7 +202,7 @@ def _validate_baseline_config(config: BaselineRunConfig) -> None:
         raise ValueError("baselines.names must not be empty")
     if len(set(config.baselines.names)) != len(config.baselines.names):
         raise ValueError("baselines.names must be unique")
-    allowed = {"zero", "imbalance", "ridge"}
+    allowed = {"ridge"}
     unknown = sorted(set(config.baselines.names).difference(allowed))
     if unknown:
         raise ValueError(f"unsupported baseline names: {unknown}")

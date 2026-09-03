@@ -60,7 +60,7 @@ def test_baseline_comparison_covers_four_scalar_metrics(
     result = build_baseline_comparison(
         (SimpleNamespace(fold_index=1, evaluation=model_report),),
         manifest,
-    )["zero"]
+    )["ridge"]
 
     assert result["model_fold_count"] == 1
     assert result["manifest_fold_count"] == 1
@@ -85,9 +85,9 @@ def test_load_validated_reference_reports_collects_every_artifact(
 
     manifest, reports = load_validated_reference_reports(package, fold_indices=(1,))
 
-    assert set(reports) == {(1, "zero")}
-    assert reports[(1, "zero")].sample_count == 4
-    assert reports[(1, "zero")].overall == pytest.approx({"mse": 0.5625, "mae": 0.625})
+    assert set(reports) == {(1, "ridge")}
+    assert reports[(1, "ridge")].sample_count == 4
+    assert reports[(1, "ridge")].overall == pytest.approx({"mse": 0.5625, "mae": 0.625})
     assert manifest.schema_version == BASELINE_MANIFEST_SCHEMA_VERSION
 
 
@@ -99,7 +99,7 @@ def test_baseline_comparison_rejects_incomplete_reference_reports() -> None:
         experiment_id="baseline",
         config_hash=_CONFIG_HASH,
         fold_indices=(1,),
-        baseline_names=("zero",),
+        baseline_names=("ridge",),
         artifacts=(_reference("predictions.parquet", "evaluation.yaml"),),
     )
     model_report = build_evaluation_report(
@@ -121,7 +121,7 @@ def test_manifest_rejects_old_schema_and_duplicate_references() -> None:
         "experiment_id": "baseline",
         "config_hash": _CONFIG_HASH,
         "fold_indices": [1],
-        "baseline_names": ["zero"],
+        "baseline_names": ["ridge"],
         "artifacts": [],
     }
     with pytest.raises(ValueError, match="missing=.*schema_version"):
@@ -134,7 +134,7 @@ def test_manifest_rejects_old_schema_and_duplicate_references() -> None:
             experiment_id="baseline",
             config_hash=_CONFIG_HASH,
             fold_indices=(1,),
-            baseline_names=("zero",),
+            baseline_names=("ridge",),
             artifacts=(reference, reference),
         )
 
@@ -160,10 +160,10 @@ def _published_manifest(
     metadata = _metadata()
     package = DatasetPackage(root=tmp_path / metadata.dataset_id, metadata=metadata)
     root = baseline_space(metadata.dataset_id)
-    output = root / "runs" / "baseline-1" / "fold_001" / "zero"
+    output = root / "runs" / "baseline-1" / "fold_001" / "ridge"
     artifact = _artifact(
         metadata,
-        model_name="zero",
+        model_name="ridge",
         predictions=np.array([1.0, 1.5, 2.0, 1.0]),
     )
     prediction_path = Path(
@@ -173,7 +173,7 @@ def _published_manifest(
     evaluation_path = Path(save_evaluation_outputs(report, output)["evaluation_report"])
     reference = BaselineArtifactReference(
         fold_index=1,
-        baseline_name="zero",
+        baseline_name="ridge",
         predictions_path=prediction_path.relative_to(root).as_posix(),
         predictions_sha256=artifact_file_sha256(prediction_path),
         evaluation_path=evaluation_path.relative_to(root).as_posix(),
@@ -184,7 +184,7 @@ def _published_manifest(
         experiment_id="baseline-1",
         config_hash=_CONFIG_HASH,
         fold_indices=(1,),
-        baseline_names=("zero",),
+        baseline_names=("ridge",),
         artifacts=(reference,),
         schema_version=BASELINE_MANIFEST_SCHEMA_VERSION,
     )
@@ -195,7 +195,7 @@ def _published_manifest(
 def _reference(predictions_path: str, evaluation_path: str) -> BaselineArtifactReference:
     return BaselineArtifactReference(
         fold_index=1,
-        baseline_name="zero",
+        baseline_name="ridge",
         predictions_path=predictions_path,
         predictions_sha256="b" * 64,
         evaluation_path=evaluation_path,

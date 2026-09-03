@@ -115,9 +115,9 @@ uv run hft_lob data verify --dataset-dir data/datasets/688981/<dataset_id>
 uv run hft_lob data inspect --dataset-dir data/datasets/688981/<dataset_id>
 ```
 
-## 阶段二：共享 baseline 实验
+## 阶段二：共享 Ridge baseline 实验
 
-baseline 必须先于模型实验生成。一次 baseline 实验覆盖配置中的全部 baseline 和 fold：
+Ridge baseline 必须先于模型实验生成；一次 baseline 实验覆盖选定的 walk-forward fold：
 
 ```bash
 uv run hft_lob baseline run \
@@ -150,7 +150,7 @@ folds:
   num_folds: 1
 ```
 
-模型启动前会校验数据集 default baseline manifest、请求 fold 覆盖范围及所有 baseline artifact；
+模型启动前会校验数据集 default Ridge baseline manifest、请求 fold 覆盖范围及 Ridge artifact；
 缺失或不一致时不会开始模型训练。
 
 每个已注册模型都有可直接加载的默认模板，位于 `configs/models/`：
@@ -253,8 +253,6 @@ output/<dataset_id>/baseline/
 └── runs/
     └── <baseline_run_id>/
         └── fold_001/
-            ├── zero/
-            ├── imbalance/
             └── ridge/
 ```
 评测报告中的 `mean_daily_ic` 是各交易日 TS-IC 的有限值算术平均；`daily_ic_curve.png`
@@ -288,7 +286,7 @@ src/hft_lob/
 ├── data_types.py    # 跨模块共享的底层 LOBBatch / SampleMeta 类型
 ├── data_pipeline/   # 数据加载、处理、切分与写入
 ├── datasets/        # LOB Dataset 与 Lightning DataModule
-├── baselines/       # Zero、Imbalance、Ridge 与 baseline manifest
+├── baselines/       # Ridge baseline 与 baseline manifest
 ├── models/          # PyTorch 模型、模型工厂与 model bundle
 ├── trainner/        # 训练模块、损失函数、executor 与 walk-forward
 ├── metrics/         # 评测指标

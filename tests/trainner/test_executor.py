@@ -103,11 +103,11 @@ def test_baseline_run_publishes_dataset_manifest(
     )
     manifest = load_default_manifest(result.dataset_version)
 
-    assert result.artifact_count == 3
+    assert result.artifact_count == 1
     assert result.experiment_id == "baseline-smoke"
     assert manifest.experiment_id == "baseline-smoke"
-    assert manifest.baseline_names == ("zero", "imbalance", "ridge")
-    assert len(manifest.artifacts) == 3
+    assert manifest.baseline_names == ("ridge",)
+    assert len(manifest.artifacts) == 1
 
 
 def _configs(tmp_path: Path) -> tuple[DataBuildConfig, ModelRunConfig]:

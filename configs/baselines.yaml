@@ -7,7 +7,7 @@ loader:
   prefetch_factor: null
 
 baselines:
-  names: [zero, imbalance, ridge]
+  names: [ridge]
   ridge_alpha: 1.0
 
 evaluation:

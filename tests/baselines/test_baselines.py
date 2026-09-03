@@ -3,9 +3,10 @@ from __future__ import annotations
 import pytest
 import torch
 
-from hft_lob.baselines import volume_feature_indices
-from hft_lob.baselines.models import ImbalanceBaseline, RidgeBaseline, ZeroBaseline
+from hft_lob.baselines import BASELINE_NAMES, build_baseline
+from hft_lob.baselines.models import RidgeBaseline
 from hft_lob.baselines.runner import BaselineRunner
+from hft_lob.configs.experiment import BaselineConfig
 from hft_lob.data_types import LOBBatch, SampleMeta
 
 
@@ -25,25 +26,6 @@ def _meta() -> tuple[SampleMeta, ...]:
     )
 
 
-def test_zero_baseline_preserves_batch_contract() -> None:
-    x = torch.randn(3, 4, 2)
-    y = torch.randn(3, 2)
-    model = ZeroBaseline(target_count=2).fit(x, y)
-    assert torch.equal(model(x), torch.zeros(3, 2))
-
-
-def test_imbalance_fits_anchor_linear_mapping() -> None:
-    x = torch.zeros(4, 2, 2)
-    x[:, -1, 0] = torch.tensor([3.0, 2.0, 1.0, 4.0])
-    x[:, -1, 1] = torch.tensor([1.0, 2.0, 3.0, 0.0])
-    imbalance = (x[:, -1, 0] - x[:, -1, 1]) / x[:, -1, :].sum(dim=1)
-    y = (2 * imbalance + 0.5).unsqueeze(1).repeat(1, 2)
-    model = ImbalanceBaseline(
-        bid_volume_indices=(0,), ask_volume_indices=(1,), target_count=2
-    ).fit(x, y)
-    torch.testing.assert_close(model(x), y)
-
-
 def test_ridge_fits_and_serializes_parameters() -> None:
     torch.manual_seed(2)
     x = torch.randn(20, 2, 3)
@@ -55,33 +37,35 @@ def test_ridge_fits_and_serializes_parameters() -> None:
     assert {"weight", "intercept", "fitted"}.issubset(model.state_dict())
 
 
-
-
-def test_volume_indices_follow_level_order() -> None:
-    columns = ("ASKp1", "ASKs2", "BIDs1", "ASKs1", "BIDs2", "last")
-    bid, ask = volume_feature_indices(columns)
-    assert bid == (2, 4)
-    assert ask == (3, 1)
-
-
 def test_runner_builds_prediction_artifact() -> None:
     features = torch.randn(2, 3, 2)
     targets = torch.tensor([[0.1], [-0.2]])
     batches = (LOBBatch(features, targets, _meta()),)
-    runner = BaselineRunner("zero", ZeroBaseline(), "v1", "dataset-v1", 1)
+    runner = BaselineRunner(
+        "ridge",
+        RidgeBaseline(num_features=2, history_snapshots=3),
+        "v1",
+        "dataset-v1",
+        1,
+    )
     runner.fit(lambda: iter(batches))
     artifact = runner.predict(batches, split="test")
-    assert artifact.model_name == "zero"
-    assert artifact.predictions.tolist() == [[0.0], [0.0]]
+    assert artifact.model_name == "ridge"
+    assert artifact.predictions.shape == targets.shape
     assert artifact.targets.tolist() == targets.tolist()
 
 
-def test_all_baselines_reject_empty_training_batches() -> None:
-    models = (
-        ZeroBaseline(),
-        ImbalanceBaseline(bid_volume_indices=(0,), ask_volume_indices=(1,)),
-        RidgeBaseline(num_features=2, history_snapshots=3),
-    )
-    for model in models:
-        with pytest.raises(ValueError, match="must not be empty"):
-            model.fit_batches(lambda: iter(()))
+def test_ridge_rejects_empty_training_batches() -> None:
+    model = RidgeBaseline(num_features=2, history_snapshots=3)
+    with pytest.raises(ValueError, match="must not be empty"):
+        model.fit_batches(lambda: iter(()))
+
+def test_only_ridge_is_registered() -> None:
+    assert BASELINE_NAMES == ("ridge",)
+    with pytest.raises(ValueError, match="unsupported baseline"):
+        build_baseline(
+            "zero",
+            BaselineConfig(),
+            feature_columns=("feature",),
+            history_snapshots=1,
+        )
