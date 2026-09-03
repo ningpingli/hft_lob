@@ -1,4 +1,4 @@
-"""LOBLightningModule（需求文档 §18/§20/§21/§28）：回归训练循环 + 评估 + artifact。"""
+"""LOBLightningModule：验证阶段轻量聚合，测试阶段生成完整预测 artifact。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from torch import nn
 
 from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.data_types import LOBBatch, SampleMeta
-from hft_lob.metrics.metrics import evaluate
+from hft_lob.metrics.metrics import VALIDATION_METRIC_NAMES
 from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.trainner.losses import build_loss
 
@@ -57,8 +57,9 @@ class LOBLightningModule(L.LightningModule):
             config.training.loss,
             huber_delta=config.training.loss_huber_delta,
         )
-        self._validation_predictions: list[torch.Tensor] = []
-        self._validation_targets: list[torch.Tensor] = []
+        self._validation_mse_sum: torch.Tensor | None = None
+        self._validation_mae_sum: torch.Tensor | None = None
+        self._validation_element_count = 0
         self._test_predictions: list[torch.Tensor] = []
         self._test_targets: list[torch.Tensor] = []
         self._test_metadata: list[SampleMeta] = []
@@ -108,11 +109,25 @@ class LOBLightningModule(L.LightningModule):
         )
         return loss
 
+    def on_validation_epoch_start(self) -> None:
+        """开始轻量验证，只初始化 MSE/MAE 的流式累加器。"""
+        self._reset_validation_metrics()
+
     def validation_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)
         loss = self._compute_loss(predictions, targets)
-        self._validation_predictions.append(predictions.detach().cpu())
-        self._validation_targets.append(targets.detach().cpu())
+        errors = predictions.detach() - targets.detach()
+        self._validation_mse_sum = (
+            errors.square().sum()
+            if self._validation_mse_sum is None
+            else self._validation_mse_sum + errors.square().sum()
+        )
+        self._validation_mae_sum = (
+            errors.abs().sum()
+            if self._validation_mae_sum is None
+            else self._validation_mae_sum + errors.abs().sum()
+        )
+        self._validation_element_count += errors.numel()
         self.log(
             "val/loss",
             loss,
@@ -125,26 +140,30 @@ class LOBLightningModule(L.LightningModule):
         return loss
 
     def on_validation_epoch_end(self) -> None:
-        if not self._validation_predictions:
+        """只记录快速标量验证指标，不生成测试报告或曲线数据。"""
+        if self._validation_element_count == 0:
             return
-        predictions = torch.cat(self._validation_predictions).numpy()
-        targets = torch.cat(self._validation_targets).numpy()
-        metric_values = [
-            evaluate(predictions[:, position], targets[:, position])
-            for position in range(self.target_count)
-        ]
-        for name in ("mse", "mae"):
-            value = float(np.mean([metrics[name] for metrics in metric_values]))
+        if self._validation_mse_sum is None or self._validation_mae_sum is None:
+            raise RuntimeError("validation metric accumulators are incomplete")
+        metrics = {
+            "mse": self._validation_mse_sum / self._validation_element_count,
+            "mae": self._validation_mae_sum / self._validation_element_count,
+        }
+        for name in VALIDATION_METRIC_NAMES:
             self.log(
                 f"val/{name}",
-                torch.tensor(value, dtype=torch.float32, device=self.device),
+                metrics[name],
                 on_step=False,
                 on_epoch=True,
                 prog_bar=name == "mse",
                 sync_dist=True,
             )
-        self._validation_predictions.clear()
-        self._validation_targets.clear()
+        self._reset_validation_metrics()
+
+    def _reset_validation_metrics(self) -> None:
+        self._validation_mse_sum = None
+        self._validation_mae_sum = None
+        self._validation_element_count = 0
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)

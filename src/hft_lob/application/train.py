@@ -59,7 +59,7 @@ def run_training_application(request: TrainingRequest) -> TrainingResult:
     config = load_model_config(request.config_path, experiment_id=provisional_id)
     package = load_dataset_package(request.dataset_dir)
     logger.info(
-        "training.dataset_loaded dataset_id=%s ticker=%s validation=skipped",
+        "training.dataset_loaded dataset_id=%s ticker=%s validation=fast_metrics",
         package.metadata.dataset_id,
         package.metadata.ticker,
     )

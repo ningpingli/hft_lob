@@ -14,14 +14,18 @@ import yaml
 
 from hft_lob.configs.experiment import EvaluationConfig
 from hft_lob.data_pipeline.writer import DatasetPackage
-from hft_lob.metrics.metrics import EvaluationReport, build_evaluation_report
+from hft_lob.metrics.metrics import (
+    TEST_METRIC_NAMES,
+    EvaluationReport,
+    build_evaluation_report,
+)
 from hft_lob.reporting.artifact import load_prediction_artifact
 from hft_lob.reporting.reporter import load_evaluation_report
 from hft_lob.utils._yaml_io import atomic_dump_yaml
 
 _RESULTS_ROOT = Path("output")
 BASELINE_MANIFEST_SCHEMA_VERSION = 2
-_COMPARISON_METRICS = ("mse", "mae", "mean_daily_ic", "positive_ic_day_ratio")
+_COMPARISON_METRICS = TEST_METRIC_NAMES
 
 
 class FoldEvaluationResult(Protocol):

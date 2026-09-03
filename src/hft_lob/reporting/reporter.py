@@ -36,7 +36,7 @@ _REPORT_FIELDS = {
 
 
 def save_evaluation_outputs(report: EvaluationReport, output_dir: str | Path) -> dict[str, str]:
-    """Persist one evaluation report and its required diagnostic plots."""
+    """Persist the complete test evaluation report and diagnostic plots."""
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     report_path = destination / "evaluation.yaml"

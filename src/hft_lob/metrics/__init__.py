@@ -1,6 +1,8 @@
 """模型评测指标。"""
 
 from hft_lob.metrics.metrics import (
+    TEST_METRIC_NAMES,
+    VALIDATION_METRIC_NAMES,
     DailyICRecord,
     EvaluationReport,
     PredictionBinRecord,
@@ -19,6 +21,8 @@ __all__ = [
     "DailyICRecord",
     "EvaluationReport",
     "PredictionBinRecord",
+    "TEST_METRIC_NAMES",
+    "VALIDATION_METRIC_NAMES",
     "build_evaluation_report",
     "daily_ic_records",
     "evaluate",

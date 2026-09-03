@@ -82,17 +82,27 @@ def test_training_and_optimizer_contract() -> None:
     assert isinstance(optimizer, torch.optim.AdamW)
 
 
-def test_validation_logs_epoch_metrics_and_clears_buffers() -> None:
+def test_validation_logs_only_fast_metrics_and_clears_accumulators() -> None:
     module = _module()
+    batch = _batch()
+    expected = module(batch.features).detach()
     logged: dict[str, Any] = {}
     module.log = lambda name, value, **kwargs: logged.__setitem__(name, value)  # type: ignore[method-assign]
 
-    module.validation_step(_batch(), 0)
+    module.on_validation_epoch_start()
+    module.validation_step(batch, 0)
     module.on_validation_epoch_end()
 
-    assert {"val/loss", "val/mse", "val/mae"} <= logged.keys()
-    assert not module._validation_predictions
-
+    assert set(logged) == {"val/loss", "val/mse", "val/mae"}
+    assert logged["val/mse"].item() == pytest.approx(
+        torch.mean((expected - batch.targets).square()).item()
+    )
+    assert logged["val/mae"].item() == pytest.approx(
+        torch.mean((expected - batch.targets).abs()).item()
+    )
+    assert module._validation_element_count == 0
+    assert module._validation_mse_sum is None
+    assert module._validation_mae_sum is None
 
 def test_test_uses_complete_artifact_contract() -> None:
     module = _module()

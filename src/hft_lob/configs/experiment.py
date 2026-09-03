@@ -150,7 +150,7 @@ class BaselineConfig:
 
 @dataclass(frozen=True)
 class TrainingConfig:
-    """训练（§20/§29）：primary loss = huber；全随机种子。"""
+    """训练配置：验证阶段只使用快速的 val/mse 或 val/mae 监控。"""
 
     loss: str = "huber"
     loss_huber_delta: float = 1.0
@@ -166,7 +166,7 @@ class TrainingConfig:
 
 @dataclass(frozen=True)
 class EvaluationConfig:
-    """固定评估契约：MSE、MAE、日级 IC 统计与两类诊断曲线。"""
+    """测试阶段完整评估配置：标量指标、日级 IC 与诊断曲线。"""
 
     prediction_bins: int = 10
 

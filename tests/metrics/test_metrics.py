@@ -1,4 +1,3 @@
-from __future__ import annotations
 
 import math
 
@@ -8,6 +7,8 @@ import pytest
 from hft_lob.configs.experiment import EvaluationConfig
 from hft_lob.data_types import SampleMeta
 from hft_lob.metrics.metrics import (
+    TEST_METRIC_NAMES,
+    VALIDATION_METRIC_NAMES,
     build_evaluation_report,
     daily_ic_records,
     evaluate,
@@ -90,6 +91,37 @@ def test_build_evaluation_report_contains_per_label_metrics() -> None:
     assert set(report.per_label) == {60, 120}
     assert report.per_label[60].overall == {"mse": 0.0, "mae": 0.0}
 
+
+def test_complete_report_requires_test_artifact() -> None:
+    predictions = np.ones((4, 1))
+    metadata = tuple(
+        SampleMeta(
+            ticker="TEST",
+            trade_date="2025-01-01",
+            session_id="am",
+            anchor_timestamp=f"2025-01-01T09:30:{index:02d}",
+            mid_t=100.0,
+            bid1=99.0,
+            ask1=101.0,
+            spread=2.0,
+        )
+        for index in range(4)
+    )
+    artifact = PredictionArtifact(
+        predictions=predictions,
+        targets=predictions.copy(),
+        labels=(60,),
+        metadata=metadata,
+        model_name="model",
+        model_version="v1",
+        dataset_version="v1",
+        fold_index=1,
+        split="validation",
+    )
+    assert VALIDATION_METRIC_NAMES == ("mse", "mae")
+    assert TEST_METRIC_NAMES == ("mse", "mae", "mean_daily_ic", "positive_ic_day_ratio")
+    with pytest.raises(ValueError, match="test artifact"):
+        build_evaluation_report(artifact, EvaluationConfig(prediction_bins=2))
 
 def test_evaluation_config_rejects_invalid_bin_count() -> None:
     with pytest.raises(ValueError, match="integer >= 2"):

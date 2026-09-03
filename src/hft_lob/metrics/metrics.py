@@ -1,4 +1,4 @@
-"""Single-stock time-series evaluation metrics and report construction."""
+"""验证集只计算快速标量误差；测试集额外计算 IC、分桶与诊断曲线。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,15 @@ import numpy as np
 from hft_lob.configs.experiment import EvaluationConfig
 from hft_lob.reporting.artifact import PredictionArtifact
 
-METRIC_NAMES: tuple[str, ...] = ("mse", "mae")
+VALIDATION_METRIC_NAMES: tuple[str, ...] = ("mse", "mae")
+TEST_METRIC_NAMES: tuple[str, ...] = (
+    "mse",
+    "mae",
+    "mean_daily_ic",
+    "positive_ic_day_ratio",
+)
+
+METRIC_NAMES = VALIDATION_METRIC_NAMES
 
 
 @dataclass(frozen=True)
@@ -95,7 +103,7 @@ def positive_ic_day_ratio(daily_ics: np.ndarray) -> float:
 
 
 def evaluate(preds: np.ndarray, targets: np.ndarray) -> dict[str, float]:
-    """Calculate the complete configured scalar error metric set."""
+    """Calculate the fast scalar metrics used during validation."""
     return {
         "mse": mse(preds, targets),
         "mae": mae(preds, targets),
@@ -155,7 +163,9 @@ def build_evaluation_report(
     artifact: PredictionArtifact,
     config: EvaluationConfig,
 ) -> EvaluationReport:
-    """Build aggregate and per-label reports from the prediction matrix."""
+    """Build the complete test-only report, including curve data."""
+    if artifact.split != "test":
+        raise ValueError("complete evaluation reports require a test artifact")
     trade_dates = np.asarray([meta.trade_date for meta in artifact.metadata])
     per_label: dict[int, LabelEvaluation] = {}
     flattened_predictions: list[np.ndarray] = []
