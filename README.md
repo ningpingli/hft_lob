@@ -21,7 +21,23 @@ uv run hft_lob --help
 
 ## 阶段一：构建数据集
 
-在 `configs/dataset.yaml` 中设置原始数据位置和构建参数。原始数据建议按交易日保存：
+在 `configs/dataset.yaml` 中设置原始数据位置和构建参数。当前真实数据位于：
+
+```yaml
+data:
+  raw_dir: C:/Users/GF/hft-project/raw_data
+```
+
+不要将 `raw_dir` 直接设置为 `raw_data/688981`。程序会根据：
+
+```yaml
+task:
+  ticker: "688981"
+```
+
+自动定位 `raw_dir/688981/`。
+
+原始数据建议按交易日保存：
 
 ```text
 <raw_dir>/688981/
@@ -30,7 +46,9 @@ uv run hft_lob --help
 └── ...
 ```
 
-构建数据集：
+构建真实数据集：
+
+Bash：
 
 ```bash
 uv run hft_lob data build \
@@ -44,6 +62,26 @@ PowerShell：
 uv run hft_lob data build `
   --config configs/dataset.yaml `
   --output-root data/datasets/688981
+```
+
+一行写法：
+
+```powershell
+uv run hft_lob data build --config configs/dataset.yaml --output-root data/datasets/688981
+```
+
+构建结果会输出到 `data/datasets/688981/<dataset_id>/`。验证构建结果：
+
+```powershell
+uv run hft_lob data verify `
+  --dataset-dir data/datasets/688981/<dataset_id>
+```
+
+查看元数据：
+
+```powershell
+uv run hft_lob data inspect `
+  --dataset-dir data/datasets/688981/<dataset_id>
 ```
 
 命令完成后会打印数据集目录：
@@ -127,6 +165,15 @@ uv run hft_lob train \
   --experiment-id transformer-688981
 ```
 
+使用 DeepLOB 模型训练：
+
+```bash
+uv run hft_lob train \
+  --config configs/models/deeplob.yaml \
+  --dataset-dir data/datasets/688981/<dataset_id> \
+  --experiment-id deeplob-688981
+```
+
 启动训练：
 
 ```bash
@@ -176,6 +223,16 @@ uv run hft_lob test \
   --model-dir loggers/results/<experiment_id>/walk_forward/fold_001/cnn1
 ```
 
+使用刚训练的 DeepLOB checkpoint 进行独立测试：
+
+```bash
+uv run hft_lob test \
+  --test-data-dir data/datasets/688981/<test_dataset_id> \
+  --model-name deeplob \
+  --model-dir loggers/results/deeplob-688981/walk_forward/fold_001/deeplob \
+  --output-dir loggers/results/deeplob-688981/standalone_test
+```
+
 可通过 `--output-dir` 指定输出位置；默认写入
 `loggers/results/standalone_test/<model_version>/<test_dataset_id>/`。测试数据集必须
 与 `model_metadata.yaml` 记录的特征顺序、窗口、采样间隔、归一化和目标契约一致，
@@ -220,15 +277,17 @@ uv run mypy src/hft_lob
 
 ```text
 src/hft_lob/
+├── application/     # dataset、baseline、train、独立测试应用用例
+├── cli/             # 命令行参数解析、分发与结果输出
 ├── configs/         # Python 配置契约与 YAML 配置
+├── data_types.py    # 跨模块共享的底层 LOBBatch / SampleMeta 类型
 ├── data_pipeline/   # 数据加载、处理、切分与写入
 ├── datasets/        # LOB Dataset 与 Lightning DataModule
-├── models/          # 纯 PyTorch 模型与模型工厂
-├── modules/         # Lightning 训练/测试模块
+├── baselines/       # Zero、Imbalance、Ridge 与 baseline manifest
+├── models/          # PyTorch 模型、模型工厂与 model bundle
+├── trainner/        # 训练模块、损失函数、executor 与 walk-forward
 ├── metrics/         # 评测指标
 ├── reporting/       # 预测产物与评测报告
-├── cli/             # dataset/train/test 命令
-├── baselines/       # Zero、Imbalance、Ridge
-├── systems/         # walk-forward 训练编排与模型 bundle
+├── utils/           # seed、实验目录、配置 hash 等通用工具
 └── main.py          # CLI 兼容入口
 ```
