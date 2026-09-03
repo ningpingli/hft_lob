@@ -14,13 +14,12 @@ from hft_lob.data_pipeline.writer import (
     DatasetPackageMetadata,
     DatasetPackageWriter,
     compute_dataset_id,
-    stable_config_hash,
 )
+from hft_lob.utils.identity import stable_config_hash
 
 logger = logging.getLogger(__name__)
 
 
-logger = logging.getLogger(__name__)
 
 def build_dataset_package(config: DataBuildConfig, output_root: str | Path) -> Path:
     """从 immutable raw 构建并原子发布一个内容寻址数据包。"""

@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
 import shutil
 import uuid
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass, is_dataclass
-from datetime import date, datetime, time
-from enum import Enum
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -20,29 +16,18 @@ import polars as pl
 import pyarrow.parquet as pq
 
 from hft_lob.data_pipeline.loader import CompiledDay, CompiledSession
-from hft_lob.data_pipeline.splitter import WalkForwardPlan, write_fold_indexes
+from hft_lob.data_pipeline.splitter import (
+    FOLD_INDEX_COLUMNS,
+    FOLD_INDEX_SCHEMA,
+    WalkForwardPlan,
+    write_fold_indexes,
+)
+from hft_lob.utils.identity import stable_config_hash
 
 PACKAGE_SCHEMA_VERSION = 4
 
 SUCCESS_MARKER = "_SUCCESS"
 
-FOLD_INDEX_COLUMNS = (
-    "global_anchor_index",
-    "session_start_index",
-    "anchor_index",
-    "trade_date",
-    "session_id",
-    "anchor_timestamp",
-)
-
-FOLD_INDEX_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
-    "global_anchor_index": pl.Int64,
-    "session_start_index": pl.Int64,
-    "anchor_index": pl.Int64,
-    "trade_date": pl.String,
-    "session_id": pl.String,
-    "anchor_timestamp": pl.Datetime("us"),
-}
 
 QUALITY_COLUMNS = (
     "trade_date",
@@ -70,15 +55,6 @@ QUALITY_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "invalid_level_order_count": pl.Int64,
 }
 
-def stable_config_hash(config: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
-        _canonicalize(config),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 def compute_dataset_id(
     *,
@@ -394,29 +370,6 @@ def _validate_fold_references(
     if referenced.height != frame.height or not mismatch.is_empty():
         raise ValueError("fold index metadata does not match rows.parquet")
 
-def _canonicalize(value: Any) -> Any:
-    if is_dataclass(value) and not isinstance(value, type):
-        return _canonicalize(asdict(value))
-    if isinstance(value, Mapping):
-        if any(not isinstance(key, str) for key in value):
-            raise TypeError("config mapping keys must be strings")
-        return {key: _canonicalize(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_canonicalize(item) for item in value]
-    if isinstance(value, (set, frozenset)):
-        items = [_canonicalize(item) for item in value]
-        return sorted(items, key=lambda item: json.dumps(item, sort_keys=True))
-    if isinstance(value, Path):
-        return value.as_posix()
-    if isinstance(value, datetime):
-        return value.isoformat(timespec="microseconds")
-    if isinstance(value, (date, time)):
-        return value.isoformat()
-    if isinstance(value, Enum):
-        return _canonicalize(value.value)
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    raise TypeError(f"unsupported config value type: {type(value).__name__}")
 
 logger = logging.getLogger(__name__)
 

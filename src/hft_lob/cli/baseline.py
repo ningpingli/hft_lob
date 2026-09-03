@@ -6,10 +6,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from hft_lob.configs import BaselineRunConfig, load_baseline_config
-from hft_lob.data_pipeline.writer import (
-    load_dataset_package,
-    stable_config_hash,
-)
+from hft_lob.data_pipeline.writer import load_dataset_package
 from hft_lob.metrics.metrics import build_evaluation_report
 from hft_lob.reporting.artifact import save_prediction_artifact
 from hft_lob.reporting.reporter import save_evaluation_outputs
@@ -27,6 +24,7 @@ from hft_lob.systems.baseline_manifest import (
 from hft_lob.systems.executor import DefaultWalkForwardExecutor
 from hft_lob.systems.walk_forward import select_package_folds
 from hft_lob.utils.experiment_manager import resolve_experiment_id
+from hft_lob.utils.identity import stable_config_hash
 from hft_lob.utils.seed import set_seed
 
 

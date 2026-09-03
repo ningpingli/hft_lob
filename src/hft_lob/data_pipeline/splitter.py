@@ -11,6 +11,24 @@ import polars as pl
 
 from hft_lob.configs.experiment import DataBuildConfig, SplitConfig, WalkForwardConfig
 
+FOLD_INDEX_COLUMNS = (
+    "global_anchor_index",
+    "session_start_index",
+    "anchor_index",
+    "trade_date",
+    "session_id",
+    "anchor_timestamp",
+)
+
+FOLD_INDEX_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "global_anchor_index": pl.Int64,
+    "session_start_index": pl.Int64,
+    "anchor_index": pl.Int64,
+    "trade_date": pl.String,
+    "session_id": pl.String,
+    "anchor_timestamp": pl.Datetime("us"),
+}
+
 
 @dataclass(frozen=True)
 class ChronologicalSplit:
@@ -204,7 +222,6 @@ def write_fold_indexes(
     plan: WalkForwardPlan,
 ) -> None:
     """把日期计划物化为只含 sample index 的 fold parquet。"""
-    from hft_lob.data_pipeline.writer import FOLD_INDEX_COLUMNS
     anchors = pl.scan_parquet(anchors_path)
     for fold in plan.folds:
         for split, dates in (

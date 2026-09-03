@@ -8,8 +8,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+from hft_lob.data_pipeline.splitter import FOLD_INDEX_SCHEMA
 from hft_lob.data_pipeline.writer import (
-    FOLD_INDEX_SCHEMA,
     DatasetPackageMetadata,
     compute_dataset_id,
     load_dataset_package,

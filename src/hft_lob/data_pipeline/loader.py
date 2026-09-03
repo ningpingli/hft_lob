@@ -20,6 +20,7 @@ from hft_lob.data_pipeline.processor import (
     SessionSegment,
     label_columns,
 )
+from hft_lob.utils.identity import stable_config_hash
 
 
 @dataclass(frozen=True)
@@ -49,8 +50,6 @@ class SourceSet:
     version: str
 
 def discover_sources(config: DataBuildConfig) -> SourceSet:
-    from hft_lob.data_pipeline.writer import stable_config_hash
-
     root = Path(config.data.raw_dir)
     ticker_root = root / config.ticker
     search_root = ticker_root if ticker_root.is_dir() else root
