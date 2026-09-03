@@ -7,18 +7,15 @@ import json
 import logging
 from collections.abc import Sequence
 
-from hft_lob.application import (
-    BaselineRunRequest,
+from hft_lob.cli.baseline import BaselineRunRequest, run_baseline_application
+from hft_lob.cli.dataset import (
     DatasetBuildRequest,
-    StandaloneTestRequest,
-    TrainingRequest,
     build_dataset,
     inspect_dataset,
-    run_baseline_application,
-    run_standalone_test,
-    run_training_application,
     verify_dataset,
 )
+from hft_lob.cli.test import StandaloneTestRequest, run_standalone_test
+from hft_lob.cli.train import TrainingRequest, run_training_application
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
