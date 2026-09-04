@@ -48,3 +48,4 @@ uv.lock
 !.github/workflows/ci.yml
 
 output/
+NUL
