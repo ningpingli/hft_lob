@@ -189,6 +189,29 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("training.monitor_metric must be 'val/mean_daily_ic'")
     if config.training.monitor_mode != "max":
         raise ValueError("training.monitor_mode must be 'max' for mean daily IC")
+    if config.training.scheduler != "cosine":
+        raise ValueError("training.scheduler must be 'cosine'")
+    numeric_fields = {
+        "learning_rate": config.training.learning_rate,
+        "min_learning_rate": config.training.min_learning_rate,
+        "weight_decay": config.training.weight_decay,
+        "gradient_clip_val": config.training.gradient_clip_val,
+        "warmup_ratio": config.training.warmup_ratio,
+    }
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in numeric_fields.values()):
+        raise ValueError("training numeric stability fields must be numbers")
+    if config.training.learning_rate <= 0:
+        raise ValueError("training.learning_rate must be > 0")
+    if config.training.min_learning_rate <= 0:
+        raise ValueError("training.min_learning_rate must be > 0")
+    if config.training.min_learning_rate > config.training.learning_rate:
+        raise ValueError("training.min_learning_rate must be <= training.learning_rate")
+    if config.training.weight_decay < 0:
+        raise ValueError("training.weight_decay must be >= 0")
+    if config.training.gradient_clip_val < 0:
+        raise ValueError("training.gradient_clip_val must be >= 0")
+    if not 0 <= config.training.warmup_ratio < 1:
+        raise ValueError("training.warmup_ratio must be in [0, 1)")
     if len(config.training.betas) != 2 or any(
         isinstance(beta, bool) or not isinstance(beta, (int, float)) or not 0 <= beta < 1
         for beta in config.training.betas

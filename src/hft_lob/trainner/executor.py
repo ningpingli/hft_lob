@@ -74,6 +74,7 @@ class DefaultWalkForwardExecutor:
             callbacks=[checkpoint, early_stopping],
             accelerator=self.accelerator,
             devices=self.devices,
+            gradient_clip_val=config.training.gradient_clip_val,
         )
         lightning_module = LOBLightningModule(
             build_model(
@@ -217,7 +218,7 @@ def build_early_stopping_callback(
     mode: str,
     patience: int = 20,
     min_delta: float = 0.001,
-    check_finite: bool = False,
+    check_finite: bool = True,
 ) -> Callback:
     """构建单 fold 早停回调。"""
     _validate_monitor_mode(mode)
@@ -279,6 +280,7 @@ def build_trainer(
     }
     if gradient_clip_val is not None:
         trainer_kwargs["gradient_clip_val"] = gradient_clip_val
+        trainer_kwargs["gradient_clip_algorithm"] = "norm"
     return L.Trainer(**trainer_kwargs)
 
 

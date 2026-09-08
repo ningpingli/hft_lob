@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 import lightning.pytorch as L
 import numpy as np
 import torch
@@ -12,6 +15,27 @@ from hft_lob.data_types import LOBBatch, SampleMeta
 from hft_lob.metrics.metrics import VALIDATION_METRIC_NAMES, daily_ic_records, mean_daily_ic
 from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.trainner.losses import build_loss
+
+
+@dataclass(frozen=True)
+class _LearningRateSchedule:
+    """Step-based linear warmup followed by cosine decay."""
+
+    total_steps: int
+    warmup_steps: int
+    min_lr_ratio: float
+    start_lr_ratio: float = 0.1
+
+    def multiplier(self, step: int) -> float:
+        if self.total_steps <= 1:
+            return self.min_lr_ratio
+        if self.warmup_steps > 0 and step < self.warmup_steps:
+            progress = step / self.warmup_steps
+            return self.start_lr_ratio + (1.0 - self.start_lr_ratio) * progress
+        decay_steps = max(1, self.total_steps - self.warmup_steps)
+        progress = min(1.0, max(0.0, (step - self.warmup_steps) / decay_steps))
+        cosine = 0.5 * (1.0 + np.cos(np.pi * progress))
+        return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * float(cosine)
 
 
 class LOBLightningModule(L.LightningModule):
@@ -225,16 +249,51 @@ class LOBLightningModule(L.LightningModule):
         self._test_predictions.clear()
         self._test_targets.clear()
         self._test_metadata.clear()
-    def configure_optimizers(self) -> torch.optim.Optimizer:
+    def configure_optimizers(self) -> Any:
         training = self.config.training
-        if training.learning_rate <= 0 or training.weight_decay < 0:
-            raise ValueError("learning_rate must be > 0 and weight_decay must be >= 0")
-        return torch.optim.AdamW(
+        if (
+            training.learning_rate <= 0
+            or training.min_learning_rate <= 0
+            or training.min_learning_rate > training.learning_rate
+            or training.weight_decay < 0
+            or not 0 <= training.warmup_ratio < 1
+        ):
+            raise ValueError("invalid optimizer stability configuration")
+        if training.scheduler != "cosine":
+            raise ValueError("training.scheduler must be 'cosine'")
+
+        optimizer = torch.optim.AdamW(
             self.parameters(),
             lr=training.learning_rate,
             betas=training.betas,
             weight_decay=training.weight_decay,
         )
+        try:
+            total_steps = int(self.trainer.estimated_stepping_batches)
+        except (RuntimeError, TypeError, ValueError, OverflowError):
+            total_steps = training.epochs
+        total_steps = max(1, total_steps)
+        warmup_steps = min(
+            max(0, total_steps - 1),
+            int(round(total_steps * training.warmup_ratio)),
+        )
+        schedule = _LearningRateSchedule(
+            total_steps=total_steps,
+            warmup_steps=warmup_steps,
+            min_lr_ratio=training.min_learning_rate / training.learning_rate,
+        )
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda=schedule.multiplier,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
 
     def _shared_step(self, batch: LOBBatch) -> tuple[torch.Tensor, torch.Tensor]:
         if batch.features.ndim != 3:

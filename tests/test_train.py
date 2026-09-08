@@ -65,6 +65,7 @@ def test_callback_factories(tmp_path: Path) -> None:
     assert checkpoint.dirpath == str(tmp_path.resolve())
     assert isinstance(early_stopping, EarlyStopping)
     assert early_stopping.patience == 3
+    assert early_stopping.check_finite is True
 
 
 def test_build_trainer_adds_default_callbacks(
@@ -73,12 +74,19 @@ def test_build_trainer_adds_default_callbacks(
     captured: dict[str, Any] = {}
     monkeypatch.setattr(train.L, "Trainer", lambda **kwargs: captured.update(kwargs) or kwargs)
 
-    result = train.build_trainer(str(tmp_path), epochs=2, patience=4)
+    result = train.build_trainer(
+        str(tmp_path),
+        epochs=2,
+        patience=4,
+        gradient_clip_val=1.0,
+    )
 
     assert result == captured
     assert captured["max_epochs"] == 2
     assert captured["logger"] is False
     assert sum(isinstance(item, ModelCheckpoint) for item in captured["callbacks"]) == 1
+    assert captured["gradient_clip_val"] == 1.0
+    assert captured["gradient_clip_algorithm"] == "norm"
     assert sum(isinstance(item, EarlyStopping) for item in captured["callbacks"]) == 1
 
 

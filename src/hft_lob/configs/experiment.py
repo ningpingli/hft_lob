@@ -158,9 +158,13 @@ class TrainingConfig:
     patience: int = 10
     monitor_metric: str = "val/mean_daily_ic"
     monitor_mode: str = "max"
-    learning_rate: float = 1e-3
+    learning_rate: float = 3e-4
+    min_learning_rate: float = 1e-5
+    scheduler: str = "cosine"
+    warmup_ratio: float = 0.1
     betas: tuple[float, float] = (0.9, 0.95)
     weight_decay: float = 1e-5
+    gradient_clip_val: float = 1.0
     log_interval_epochs: int = 1
 
 

@@ -176,6 +176,21 @@ uv run hft_lob train \
   --experiment-id transformer-688981
 ```
 
+训练默认采用 AdamW，并使用按 optimizer step 执行的线性 warmup + cosine decay：
+
+```yaml
+training:
+  learning_rate: 0.0003
+  min_learning_rate: 0.00001
+  scheduler: cosine
+  warmup_ratio: 0.1
+  gradient_clip_val: 1.0
+```
+
+`warmup_ratio: 0.1` 表示前 10% 的参数更新从峰值学习率的 10% 线性升至
+`learning_rate`，随后衰减到 `min_learning_rate`。`gradient_clip_val` 使用全局
+L2 norm 梯度裁剪。训练配置还会拒绝不支持的调度器及非法学习率范围。
+
 使用 DeepLOB 模型训练：
 
 ```bash

@@ -26,15 +26,14 @@ class MeanModel(nn.Module):
         return self.output(x.mean(dim=1))
 
 
-def _config() -> ModelRunConfig:
+def _config(*, epochs: int = 1, warmup_ratio: float = 0.1) -> ModelRunConfig:
     return ModelRunConfig(
         experiment_id="lob-module-test",
         loader=LoaderConfig(),
         model=ModelConfig(name="cnn1"),
-        training=TrainingConfig(epochs=1),
+        training=TrainingConfig(epochs=epochs, warmup_ratio=warmup_ratio),
         evaluation=EvaluationConfig(prediction_bins=2),
     )
-
 
 def _batch() -> LOBBatch:
     features = torch.tensor(
@@ -60,10 +59,14 @@ def _batch() -> LOBBatch:
     return LOBBatch(features, targets, metadata)
 
 
-def _module() -> LOBLightningModule:
+def _module(
+    *,
+    epochs: int = 1,
+    warmup_ratio: float = 0.1,
+) -> LOBLightningModule:
     module = LOBLightningModule(
         MeanModel(2),
-        _config(),
+        _config(epochs=epochs, warmup_ratio=warmup_ratio),
         dataset_version="dataset-v1",
         model_version="model-v1",
         fold_index=1,
@@ -78,9 +81,28 @@ def test_training_and_optimizer_contract() -> None:
     loss = module.training_step(_batch(), 0)
 
     assert loss.ndim == 0
-    optimizer = module.configure_optimizers()
+    configured = module.configure_optimizers()
+    optimizer = configured["optimizer"]
     assert isinstance(optimizer, torch.optim.AdamW)
+    assert configured["lr_scheduler"]["interval"] == "step"  # type: ignore[index]
 
+
+def test_learning_rate_warms_up_then_decays() -> None:
+    module = _module(epochs=10, warmup_ratio=0.2)
+    configured = module.configure_optimizers()
+    optimizer = configured["optimizer"]
+    scheduler = configured["lr_scheduler"]["scheduler"]  # type: ignore[index]
+
+    learning_rates = [optimizer.param_groups[0]["lr"]]
+    for _ in range(10):
+        optimizer.step()
+        scheduler.step()
+        learning_rates.append(optimizer.param_groups[0]["lr"])
+
+    assert learning_rates[0] == pytest.approx(3e-5)
+    assert learning_rates[2] == pytest.approx(3e-4)
+    assert learning_rates[2] > learning_rates[1] > learning_rates[0]
+    assert learning_rates[-1] == pytest.approx(1e-5)
 
 def test_validation_logs_error_metrics_and_mean_daily_ic() -> None:
     module = _module()
