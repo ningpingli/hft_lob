@@ -1,12 +1,14 @@
+# 科创50 dataset 构建配置:688568(与用户逐项确认:2026-09-07)
 task:
-  ticker: "688981"
+  ticker: "688568"
   task_type: regression
 
 data:
   levels: 5
   snapshot_interval_seconds: 3
-  raw_dir: /data/lnp/data/raw
+  raw_dir: /data/lnp/data/kechuang50
   column_mapping:
+    datetime: timestamp
     a1: ASKp1
     a1_v: ASKs1
     b1: BIDp1
@@ -29,13 +31,13 @@ data:
     b5_v: BIDs5
     last: last
     volume: volume
-    amount: amount
+    total_turnover: amount
 
 cleaning:
   max_ffill_gap_seconds: 6
 target:
-  labels: [60]
   type: log_mid_return
+  labels: [60]
   tolerance_seconds: 3
 sessions:
   morning: ["09:30:00", "11:30:00"]

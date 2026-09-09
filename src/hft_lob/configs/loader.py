@@ -185,6 +185,12 @@ def _validate_model_config(config: ModelRunConfig) -> None:
         raise ValueError("seed must be an integer in [0, 2**32)")
     if config.model.name.strip() == "":
         raise ValueError("model.name must not be empty")
+    if config.model.feature_clip is not None and (
+        isinstance(config.model.feature_clip, bool)
+        or not isinstance(config.model.feature_clip, (int, float))
+        or config.model.feature_clip <= 0
+    ):
+        raise ValueError("model.feature_clip must be a positive number or null")
     if config.training.monitor_metric != "val/mean_daily_ic":
         raise ValueError("training.monitor_metric must be 'val/mean_daily_ic'")
     if config.training.monitor_mode != "max":

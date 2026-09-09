@@ -49,7 +49,10 @@ def build_model(
         )
     if name == "itransformer":
         return ITransformer(
-            num_features=num_features, history_length=history, output_dim=target_count
+            num_features=num_features,
+            history_length=history,
+            output_dim=target_count,
+            feature_clip=config.model.feature_clip,
         )
     if name == "lobtransformer":
         return LobTransformer(num_features=num_features, levels=levels, output_dim=target_count)

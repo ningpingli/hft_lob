@@ -30,7 +30,7 @@ evaluation:
   prediction_bins: 10
 
 folds:
-  start_fold: 1
-  num_folds: null
+  start_fold: 50
+  num_folds: 10
 
 seed: 42

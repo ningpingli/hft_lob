@@ -136,6 +136,8 @@ class ModelConfig:
     """模型结构配置；输出维度由数据包 labels 决定。"""
 
     name: str = "cnn1"
+    #: iTransformer 输入特征截断界;None 用模型默认(ITransformer.FEATURE_CLIP=100)。
+    feature_clip: float | None = None
 
 
 @dataclass(frozen=True)

@@ -9,6 +9,14 @@ from torch import nn
 class ITransformer(nn.Module):
     """ITransformer：沿特征维嵌入历史序列的倒置 Transformer 回归模型。"""
 
+    #: 输入特征截断界(默认 ±1000)。causal_rolling 归一化在盘口近常数段(rolling std→0)
+    #: 会产出 1e3-1e6 级有限特征,经 embed 线性放大后 attention logits 在 fp32 softmax
+    #: (exp 上限≈88)溢出 → epoch0 即 NaN(688009、688981 fold50-59 同因)。
+    #: 正常特征 |f| 的 p99.99 ≤ ~31;±1000 仅截断 >1e3 病态尾,对健康股近似 no-op
+    #: (判别实验:688008 上 clamp 100/1000/无 三档差异在轨迹噪声带内,见 EXPERIMENT_REPORT)。
+    #: 可经 model.feature_clip 配置覆盖(≤0 无效,None 用本默认)。
+    FEATURE_CLIP: float = 1000.0
+
     def __init__(
         self,
         num_features: int | None = None,
@@ -21,6 +29,7 @@ class ITransformer(nn.Module):
         norm_first: bool = False,
         history_length: int = 100,
         output_dim: int = 1,
+        feature_clip: float | None = None,
     ) -> None:
         """初始化 ITransformer。
 
@@ -42,6 +51,8 @@ class ITransformer(nn.Module):
         num_layers = 2 if num_layers is None else num_layers
 
         self.history_length = history_length
+        if feature_clip is not None:
+            self.FEATURE_CLIP = float(feature_clip)
         # 嵌入宽度绑定历史长度：每条特征的时间序列被嵌入为 d_model 维。
         self.embed = nn.Linear(history_length, d_model, bias=False)
         layer_norm_eps: float = 1e-5
@@ -82,6 +93,7 @@ class ITransformer(nn.Module):
                 f"sample, got {x.shape[1]}. 请核对 ExperimentConfig 的 "
                 f"window.history_snapshots 契约。"
             )
+        x = torch.clamp(x, min=-self.FEATURE_CLIP, max=self.FEATURE_CLIP)
         # 转置：沿特征维（每条特征一个 token）嵌入历史序列。
         x = x.permute(0, 2, 1)
         x = self.embed(x)
