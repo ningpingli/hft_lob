@@ -61,6 +61,11 @@ def test_walk_forward_uses_fixed_trade_day_windows() -> None:
     assert folds[1].test_dates == dates[10:12]
 
 
+def test_walk_forward_requires_contiguous_test_windows() -> None:
+    with pytest.raises(ValueError, match="step_days must equal test_window_days"):
+        WalkForwardConfig(test_window_days=2, step_days=1)
+
+
 def test_split_rejects_unsorted_or_insufficient_dates() -> None:
     with pytest.raises(ValueError, match="sorted ascending"):
         chronological_split(
@@ -73,5 +78,6 @@ def test_split_rejects_unsorted_or_insufficient_dates() -> None:
                 train_window_days=3,
                 validation_window_days=1,
                 test_window_days=1,
+                step_days=1,
             ),
         )

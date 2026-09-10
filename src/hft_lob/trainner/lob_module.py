@@ -87,6 +87,7 @@ class LOBLightningModule(L.LightningModule):
         self._validation_predictions: list[torch.Tensor] = []
         self._validation_targets: list[torch.Tensor] = []
         self._validation_trade_dates: list[str] = []
+        self._validation_series_ids: list[str] = []
         self._test_predictions: list[torch.Tensor] = []
         self._test_targets: list[torch.Tensor] = []
         self._test_metadata: list[SampleMeta] = []
@@ -158,6 +159,7 @@ class LOBLightningModule(L.LightningModule):
         self._validation_predictions.append(predictions.detach().cpu())
         self._validation_targets.append(targets.detach().cpu())
         self._validation_trade_dates.extend(meta.trade_date for meta in batch.metadata)
+        self._validation_series_ids.extend(meta.ticker for meta in batch.metadata)
         self.log(
             "val/loss",
             loss,
@@ -184,10 +186,12 @@ class LOBLightningModule(L.LightningModule):
         predictions = torch.cat(self._validation_predictions).numpy()
         targets = torch.cat(self._validation_targets).numpy()
         trade_dates = np.asarray(self._validation_trade_dates, dtype=object)
+        series_ids = np.asarray(self._validation_series_ids, dtype=object)
         daily_ic = daily_ic_records(
             predictions.T.reshape(-1),
             targets.T.reshape(-1),
             np.tile(trade_dates, self.target_count),
+            np.tile(series_ids, self.target_count),
         )
         daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
         metrics = {
@@ -221,6 +225,7 @@ class LOBLightningModule(L.LightningModule):
         self._validation_predictions.clear()
         self._validation_targets.clear()
         self._validation_trade_dates.clear()
+        self._validation_series_ids.clear()
 
     def test_step(self, batch: LOBBatch, batch_idx: int) -> torch.Tensor:
         predictions, targets = self._shared_step(batch)

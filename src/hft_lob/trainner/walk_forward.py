@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -77,7 +77,7 @@ def run_walk_forward(
     *,
     executor: WalkForwardExecutor,
 ) -> WalkForwardReport:
-    """执行模型 walk-forward 闭环；baseline 已由启动前 manifest 校验保证可用。"""
+    """执行模型 walk-forward 闭环；跨 fold 的测试评估统一计算。"""
     root = package.root
     metadata = package.metadata
     fold_indices = select_package_folds(root, config.folds)
@@ -90,6 +90,7 @@ def run_walk_forward(
     )
 
     results: list[FoldResult] = []
+    candidate_runs: dict[str, list[CandidateFoldRun]] = {name: [] for name in candidates}
     for fold_index in fold_indices:
         for candidate_name in candidates:
             candidate_started = time.perf_counter()
@@ -112,20 +113,8 @@ def run_walk_forward(
                 artifact=run.artifact,
                 path=run.predictions_path,
             )
-            evaluation = build_evaluation_report(
-                run.artifact,
-                config.evaluation,
-            )
-            evaluation_outputs = save_evaluation_outputs(
-                evaluation,
-                Path(run.predictions_path).parent,
-            )
-            logger.info(
-                "walk_forward.evaluation_outputs fold=%d candidate=%s paths=%s",
-                fold_index,
-                candidate_name,
-                evaluation_outputs,
-            )
+            candidate_runs[candidate_name].append(run)
+            fold_evaluation = build_evaluation_report(run.artifact, config.evaluation)
             results.append(
                 FoldResult(
                     fold_index=fold_index,
@@ -134,22 +123,84 @@ def run_walk_forward(
                     dataset_metadata_path=run.dataset_metadata_path,
                     checkpoint_path=run.checkpoint_path,
                     predictions_path=predictions_path,
-                    evaluation=evaluation,
+                    evaluation=fold_evaluation,
                 )
             )
             logger.info(
                 "walk_forward.candidate_complete fold=%d candidate=%s samples=%d elapsed_seconds=%.3f",
                 fold_index,
                 candidate_name,
-                evaluation.sample_count,
+                fold_evaluation.sample_count,
                 time.perf_counter() - candidate_started,
             )
+
+    aggregate_evaluations: dict[str, EvaluationReport] = {}
+    for candidate_name in candidates:
+        runs = candidate_runs[candidate_name]
+        aggregate_artifact = _concatenate_artifacts(
+            [run.artifact for run in runs],
+            candidate_name=candidate_name,
+        )
+        aggregate_evaluation = build_evaluation_report(
+            aggregate_artifact,
+            config.evaluation,
+        )
+        aggregate_evaluations[candidate_name] = aggregate_evaluation
+        output_dir = _aggregate_output_dir(runs[0].predictions_path, candidate_name)
+        evaluation_outputs = save_evaluation_outputs(aggregate_evaluation, output_dir)
+        logger.info(
+            "walk_forward.evaluation_outputs folds=%s candidate=%s paths=%s",
+            fold_indices,
+            candidate_name,
+            evaluation_outputs,
+        )
 
     return WalkForwardReport(
         dataset_version=metadata.dataset_id,
         fold_results=tuple(results),
-        summary=_summarize_results(results, candidates=candidates),
+        summary=_summarize_results(
+            results,
+            candidates=candidates,
+            aggregate_evaluations=aggregate_evaluations,
+        ),
     )
+
+
+def _concatenate_artifacts(
+    artifacts: Sequence[PredictionArtifact],
+    *,
+    candidate_name: str,
+) -> PredictionArtifact:
+    if not artifacts:
+        raise ValueError("artifacts must not be empty")
+    first = artifacts[0]
+    for artifact in artifacts:
+        if (
+            artifact.model_name != candidate_name
+            or artifact.labels != first.labels
+            or artifact.dataset_version != first.dataset_version
+            or artifact.split != "test"
+        ):
+            raise ValueError("walk-forward artifacts must share candidate identity")
+    return PredictionArtifact(
+        predictions=np.concatenate([artifact.predictions for artifact in artifacts], axis=0),
+        targets=np.concatenate([artifact.targets for artifact in artifacts], axis=0),
+        labels=first.labels,
+        metadata=tuple(meta for artifact in artifacts for meta in artifact.metadata),
+        model_name=first.model_name,
+        model_version=first.model_version,
+        dataset_version=first.dataset_version,
+        fold_index=first.fold_index,
+        split=first.split,
+    )
+
+
+def _aggregate_output_dir(predictions_path: str, candidate_name: str) -> Path:
+    path = Path(predictions_path).resolve()
+    try:
+        return path.parents[2] / candidate_name
+    except IndexError as exc:
+        raise ValueError("predictions_path must include fold and candidate directories") from exc
 
 
 def select_package_folds(root: Path, config: FoldSelectionConfig) -> tuple[int, ...]:
@@ -202,28 +253,30 @@ def _summarize_results(
     results: list[FoldResult],
     *,
     candidates: tuple[str, ...],
+    aggregate_evaluations: Mapping[str, EvaluationReport],
 ) -> dict[str, dict[str, float]]:
-    """按 candidate 汇总 fold 级 overall 指标，不混入日级重复统计。"""
+    """汇总 fold 标量指标，并使用连续测试窗口的整体日级 IC。"""
     summary: dict[str, dict[str, float]] = {}
     for candidate_name in candidates:
         candidate_results = [
             result for result in results if result.candidate_name == candidate_name
         ]
+        if not candidate_results:
+            raise ValueError(f"candidate {candidate_name!r} has no fold results")
+        aggregate = aggregate_evaluations[candidate_name]
         metrics = tuple(candidate_results[0].evaluation.overall)
         values: dict[str, float] = {
             "fold_count": float(len(candidate_results)),
             "sample_count": float(
                 sum(result.evaluation.sample_count for result in candidate_results)
             ),
+            "mean_daily_ic_mean": aggregate.mean_daily_ic,
         }
         mean_daily_ics = np.asarray(
             [result.evaluation.mean_daily_ic for result in candidate_results],
             dtype=np.float64,
         )
         finite_mean_daily_ics = mean_daily_ics[np.isfinite(mean_daily_ics)]
-        values["mean_daily_ic_mean"] = (
-            float(np.mean(finite_mean_daily_ics)) if finite_mean_daily_ics.size else float("nan")
-        )
         values["mean_daily_ic_std"] = (
             float(np.std(finite_mean_daily_ics)) if finite_mean_daily_ics.size else float("nan")
         )

@@ -233,6 +233,8 @@ class WalkForwardConfig:
         invalid = [name for name, value in window_fields.items() if value <= 0]
         if invalid:
             raise ValueError(f"walk_forward day parameters must be > 0: {invalid}")
+        if self.step_days != self.test_window_days:
+            raise ValueError("walk_forward.step_days must equal test_window_days")
         if self.start_fold <= 0:
             raise ValueError("walk_forward.start_fold must be > 0")
         if self.num_folds is not None and self.num_folds <= 0:

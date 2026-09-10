@@ -114,20 +114,33 @@ def daily_ic_records(
     preds: np.ndarray,
     targets: np.ndarray,
     trade_dates: np.ndarray,
+    series_ids: np.ndarray | None = None,
 ) -> tuple[DailyICRecord, ...]:
-    """Calculate daily Pearson TS-IC in chronological date order."""
+    """Calculate daily Pearson time-series IC without mixing series."""
     prediction, target = _paired_vectors(preds, targets)
     dates = _metadata_vector(trade_dates, field="trade_dates", size=prediction.size)
+    if series_ids is None:
+        series = np.zeros(prediction.size, dtype=np.int8)
+    else:
+        series = _metadata_vector(series_ids, field="series_ids", size=prediction.size)
     finite_pairs = np.isfinite(prediction) & np.isfinite(target)
     records: list[DailyICRecord] = []
     for trade_date in sorted(set(dates.tolist())):
         date_mask = dates == trade_date
-        valid_mask = date_mask & finite_pairs
+        daily_scores: list[float] = []
+        sample_count = 0
+        for series_id in dict.fromkeys(series[date_mask].tolist()):
+            group_mask = date_mask & (series == series_id)
+            valid_mask = group_mask & finite_pairs
+            sample_count += int(np.count_nonzero(valid_mask))
+            score = ts_ic(prediction[group_mask], target[group_mask])
+            if np.isfinite(score):
+                daily_scores.append(score)
         records.append(
             DailyICRecord(
                 trade_date=str(trade_date),
-                sample_count=int(np.count_nonzero(valid_mask)),
-                ic=ts_ic(prediction[date_mask], target[date_mask]),
+                sample_count=sample_count,
+                ic=float(np.mean(daily_scores)) if daily_scores else float("nan"),
             )
         )
     return tuple(records)
@@ -159,6 +172,7 @@ def prediction_quantile_bins(
         for index, group in enumerate(groups, start=1)
     )
 
+
 def build_evaluation_report(
     artifact: PredictionArtifact,
     config: EvaluationConfig,
@@ -167,15 +181,16 @@ def build_evaluation_report(
     if artifact.split != "test":
         raise ValueError("complete evaluation reports require a test artifact")
     trade_dates = np.asarray([meta.trade_date for meta in artifact.metadata])
+    tickers = np.asarray([meta.ticker for meta in artifact.metadata])
     per_label: dict[int, LabelEvaluation] = {}
     flattened_predictions: list[np.ndarray] = []
     flattened_targets: list[np.ndarray] = []
     flattened_dates: list[np.ndarray] = []
+    flattened_tickers: list[np.ndarray] = []
     for position, label in enumerate(artifact.labels):
         predictions = artifact.predictions[:, position]
         targets = artifact.targets[:, position]
-        dates = trade_dates
-        daily_ic = daily_ic_records(predictions, targets, dates)
+        daily_ic = daily_ic_records(predictions, targets, trade_dates, tickers)
         daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
         bins = prediction_quantile_bins(
             predictions,
@@ -194,12 +209,14 @@ def build_evaluation_report(
         )
         flattened_predictions.append(predictions)
         flattened_targets.append(targets)
-        flattened_dates.append(dates)
+        flattened_dates.append(trade_dates)
+        flattened_tickers.append(tickers)
 
     predictions = np.concatenate(flattened_predictions)
     targets = np.concatenate(flattened_targets)
     dates = np.concatenate(flattened_dates)
-    daily_ic = daily_ic_records(predictions, targets, dates)
+    series = np.concatenate(flattened_tickers)
+    daily_ic = daily_ic_records(predictions, targets, dates, series)
     daily_values = np.asarray([record.ic for record in daily_ic], dtype=np.float64)
     return EvaluationReport(
         labels=artifact.labels,

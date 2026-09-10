@@ -234,19 +234,27 @@ uv run hft_lob train \
 output/<experiment_id>/
 ├── config_used.yaml
 └── walk_forward/
-    └── fold_001/
-        └── <model>/
-            ├── checkpoints/best_val_model.ckpt
-            ├── model_config.yaml
-            ├── model_metadata.yaml
-            ├── predictions.parquet
-            ├── evaluation.yaml
-            ├── daily_ic_curve.png
-            └── time_series_grouped_return_curve.png
+    ├── fold_001/
+    │   └── <model>/
+    │       ├── checkpoints/best_val_model.ckpt
+    │       ├── model_config.yaml
+    │       ├── model_metadata.yaml
+    │       └── predictions.parquet
+    ├── fold_002/
+    │   └── <model>/
+    │       └── ...
+    └── <model>/
+        ├── evaluation.yaml
+        ├── daily_ic_curve.png
+        └── time_series_grouped_return_curve.png
 ```
 
-每个 fold/model 目录都是可移动的自包含模型目录。独立测试只需要测试数据集、
-模型名称和该模型目录，不读取训练实验目录：
+每个 fold/model 目录都是可移动的自包含模型目录。`walk_forward/<model>/` 下的评测
+报告和曲线整合所有已执行 fold 的连续测试集；`mean_daily_ic` 与 daily IC 曲线按
+合并后的交易日序列计算，不再逐 fold 生成。
+
+独立测试只需要测试数据集、模型名称和该模型目录，不读取训练实验目录：
+
 
 ```bash
 uv run hft_lob test \
@@ -282,8 +290,9 @@ output/<dataset_id>/baseline/
         └── fold_001/
             └── ridge/
 ```
-评测报告中的 `mean_daily_ic` 是各交易日 TS-IC 的有限值算术平均；`daily_ic_curve.png`
-绘制按日期排列的逐日 TS-IC，`time_series_grouped_return_curve.png` 绘制时序分组收益曲线。
+评测报告中的 `mean_daily_ic` 先在每只股票、每个交易日的连续样本序列上计算 TS-IC，
+再将同一交易日的多只股票结果汇总为日值，并对交易日等权平均；`daily_ic_curve.png`
+按交易日展示汇总后的 TS-IC。`time_series_grouped_return_curve.png` 绘制时序分组收益曲线。
 后者将评测窗口内的全部有效样本按预测值排序后分成 `k` 个等量 bin，绘制各 bin
 真实收益均值；它不是按每个时点做横截面排序的普通分组收益曲线。
 

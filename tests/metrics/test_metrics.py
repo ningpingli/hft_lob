@@ -49,6 +49,18 @@ def test_daily_ic_statistics_use_finite_days_and_valid_sample_counts() -> None:
     assert math.isnan(ts_ic(np.ones(3), np.arange(3)))
 
 
+def test_daily_ic_does_not_mix_tickers_within_a_trade_date() -> None:
+    records = daily_ic_records(
+        np.array([1.0, 2.0, 3.0, 4.0]),
+        np.array([1.0, 2.0, 4.0, 3.0]),
+        np.array(["2025-01-02"] * 4),
+        np.array(["688981", "688981", "600519", "600519"]),
+    )
+
+    assert records[0].sample_count == 4
+    assert records[0].ic == pytest.approx(0.0)
+
+
 def test_prediction_bins_are_equal_count_and_deterministic_with_ties() -> None:
     records = prediction_quantile_bins(np.array([2.0, 1.0, 1.0, 4.0]), np.array([20.0, 10.0, 11.0, 40.0]), n_bins=2)
     assert [record.sample_count for record in records] == [2, 2]
