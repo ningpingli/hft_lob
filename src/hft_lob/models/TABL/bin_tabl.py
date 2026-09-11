@@ -19,6 +19,24 @@ def _enforce_max_norm(w: torch.Tensor) -> None:
             w *= desired / (1e-8 + norm)
 
 
+def enforce_weight_constraints(model: nn.Module) -> None:
+    """对模型内全部 BL / TABL 层权重施加范数上限（训练循环在每个优化器步之后调用）。
+
+    约束是权重的性质、与输入无关，故每个更新步之后投影一次即可：两次前向之间权重不变，
+    前向看到的取值与「每次前向都检查」的旧实现相同（见 `tests/test_model_contracts.py`
+    的等价性用例）。放在 ``forward`` 内会让每次前向都做 ``matrix_norm`` 并触发
+    device→CPU 同步——binctabl 单样本延迟 +230 μs（+28%），见 issue #16。
+    """
+    for module in model.modules():
+        if isinstance(module, BL_layer):
+            _enforce_max_norm(module.W1.data)
+            _enforce_max_norm(module.W2.data)
+        elif isinstance(module, TABL_layer):
+            _enforce_max_norm(module.W1.data)
+            _enforce_max_norm(module.W.data)
+            _enforce_max_norm(module.W2.data)
+
+
 class BiN_BTABL(nn.Module):
     """BiN_BTABL：BiN + BL 层 + TABL 层的 B(TABL) 架构。"""
 
@@ -40,6 +58,9 @@ class BiN_BTABL(nn.Module):
         self.TABL = TABL_layer(d3, d2, t2, t3)
         self.dropout = nn.Dropout(0.1)
 
+        # 初始化后立即满足范数约束：旧实现在第一次前向内钳制，构造时钳制与之逐位等价。
+        enforce_weight_constraints(self)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
 
@@ -55,14 +76,10 @@ class BiN_BTABL(nn.Module):
 
         x = self.BiN(x)
 
-        _enforce_max_norm(self.BL.W1.data)
-        _enforce_max_norm(self.BL.W2.data)
+        # 权重范数约束不在前向内执行：见 enforce_weight_constraints（训练循环按步调用）。
         x = self.BL(x)
         x = self.dropout(x)
 
-        _enforce_max_norm(self.TABL.W1.data)
-        _enforce_max_norm(self.TABL.W.data)
-        _enforce_max_norm(self.TABL.W2.data)
         x = self.TABL(x)
         x = torch.squeeze(x, 2)
         return x
@@ -94,6 +111,9 @@ class BiN_CTABL(nn.Module):
         self.TABL = TABL_layer(d4, d3, t3, t4)
         self.dropout = nn.Dropout(0.1)
 
+        # 初始化后立即满足范数约束：旧实现在第一次前向内钳制，构造时钳制与之逐位等价。
+        enforce_weight_constraints(self)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播。
 
@@ -109,19 +129,13 @@ class BiN_CTABL(nn.Module):
 
         x = self.BiN(x)
 
-        _enforce_max_norm(self.BL.W1.data)
-        _enforce_max_norm(self.BL.W2.data)
+        # 权重范数约束不在前向内执行：见 enforce_weight_constraints（训练循环按步调用）。
         x = self.BL(x)
         x = self.dropout(x)
 
-        _enforce_max_norm(self.BL2.W1.data)
-        _enforce_max_norm(self.BL2.W2.data)
         x = self.BL2(x)
         x = self.dropout(x)
 
-        _enforce_max_norm(self.TABL.W1.data)
-        _enforce_max_norm(self.TABL.W.data)
-        _enforce_max_norm(self.TABL.W2.data)
         x = self.TABL(x)
         x = torch.squeeze(x, 2)
         return x

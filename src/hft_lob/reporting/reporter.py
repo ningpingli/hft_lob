@@ -21,6 +21,12 @@ from hft_lob.metrics.metrics import (
 )
 from hft_lob.utils._yaml_io import atomic_dump_yaml
 
+#: 连续测试窗口可能跨越上千个交易日；x 轴只标注有限数量的日期刻度。
+_MAX_DATE_TICKS = 20
+
+#: 每个刻度标签占用的图宽（英寸），用于按刻度数放宽图幅、避免标签重叠。
+_TICK_WIDTH_INCHES = 0.62
+
 _REPORT_FIELDS = {
     "labels",
     "sample_count",
@@ -142,10 +148,12 @@ def plot_daily_ic_curve(report: EvaluationReport, output_path: str | Path) -> Pa
     """Plot the chronological daily Pearson TS-IC series and its mean."""
     path = _prepare_output_path(output_path)
     pyplot = _pyplot()
-    figure, axis = pyplot.subplots(figsize=(10, 5))
     dates = [record.trade_date for record in report.daily_ic]
     values = np.asarray([record.ic for record in report.daily_ic], dtype=np.float64)
     positions = np.arange(len(dates))
+    tick_positions = _date_tick_positions(len(dates))
+    width = max(10.0, _TICK_WIDTH_INCHES * max(tick_positions.size, 1))
+    figure, axis = pyplot.subplots(figsize=(width, 5))
     finite = np.isfinite(values)
     if np.any(finite):
         axis.plot(
@@ -167,8 +175,8 @@ def plot_daily_ic_curve(report: EvaluationReport, output_path: str | Path) -> Pa
     axis.set_title("Daily TS-IC Curve")
     axis.set_xlabel("Trade date")
     axis.set_ylabel("TS-IC")
-    axis.set_xticks(positions)
-    axis.set_xticklabels(dates, rotation=45, ha="right")
+    axis.set_xticks(tick_positions)
+    axis.set_xticklabels([dates[index] for index in tick_positions], rotation=45, ha="right")
     axis.grid(alpha=0.25)
     if np.any(finite) or np.isfinite(report.mean_daily_ic):
         axis.legend(loc="best")
@@ -210,6 +218,17 @@ def plot_time_series_grouped_return_curve(
     figure.savefig(path, dpi=150)
     pyplot.close(figure)
     return path
+
+
+def _date_tick_positions(day_count: int) -> np.ndarray:
+    """等间隔的日期刻度位置，上限 ``_MAX_DATE_TICKS``，并保证末日有刻度。"""
+    if day_count <= 0:
+        return np.empty(0, dtype=np.int64)
+    stride = max(1, math.ceil(day_count / _MAX_DATE_TICKS))
+    ticks = np.arange(0, day_count, stride, dtype=np.int64)
+    if day_count - 1 - int(ticks[-1]) >= stride // 2:
+        ticks = np.concatenate([ticks, np.asarray([day_count - 1], dtype=np.int64)])
+    return ticks
 
 
 def _daily_record(value: object) -> DailyICRecord:

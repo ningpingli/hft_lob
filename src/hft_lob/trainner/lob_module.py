@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import lightning.pytorch as L
 import numpy as np
 import torch
+from lightning.pytorch.core.optimizer import LightningOptimizer
 from torch import nn
 
 from hft_lob.configs.experiment import ModelRunConfig
 from hft_lob.data_types import LOBBatch, SampleMeta
 from hft_lob.metrics.metrics import VALIDATION_METRIC_NAMES, daily_ic_records, mean_daily_ic
+from hft_lob.models.TABL.bin_tabl import enforce_weight_constraints
 from hft_lob.reporting.artifact import PredictionArtifact
 from hft_lob.trainner.losses import build_loss
 
@@ -136,6 +139,23 @@ class LOBLightningModule(L.LightningModule):
             batch_size=targets.shape[0],
         )
         return loss
+
+    def optimizer_step(
+        self,
+        epoch: int,
+        batch_idx: int,
+        optimizer: torch.optim.Optimizer | LightningOptimizer,
+        optimizer_closure: Callable[[], Any] | None = None,
+    ) -> None:
+        """每个优化器步之后施加 TABL 权重范数约束。
+
+        约束是权重的性质、与输入无关（旧实现放在 ``BiN_BTABL``/``BiN_CTABL`` 的 forward 内，
+        每次前向 5-7 次 ``matrix_norm`` 检查且每次触发 device→CPU 同步）。放在更新之后：
+        权重在两次前向之间不变，前向看到的取值与旧实现一致，同时前向热路径不再有同步
+        （binctabl 单样本延迟 −28%，见 issue #16）。
+        """
+        super().optimizer_step(epoch, batch_idx, optimizer, optimizer_closure)
+        enforce_weight_constraints(self.model)
 
     def on_validation_epoch_start(self) -> None:
         """开始验证，初始化误差与日级 IC 的聚合器。"""

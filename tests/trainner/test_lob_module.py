@@ -14,6 +14,7 @@ from hft_lob.configs.experiment import (
     TrainingConfig,
 )
 from hft_lob.data_types import LOBBatch, SampleMeta
+from hft_lob.models import build_model
 from hft_lob.trainner.lob_module import LOBLightningModule
 
 
@@ -26,11 +27,11 @@ class MeanModel(nn.Module):
         return self.output(x.mean(dim=1))
 
 
-def _config(*, epochs: int = 1, warmup_ratio: float = 0.1) -> ModelRunConfig:
+def _config(*, epochs: int = 1, warmup_ratio: float = 0.1, model_name: str = "cnn1") -> ModelRunConfig:
     return ModelRunConfig(
         experiment_id="lob-module-test",
         loader=LoaderConfig(),
-        model=ModelConfig(name="cnn1"),
+        model=ModelConfig(name=model_name),
         training=TrainingConfig(epochs=epochs, warmup_ratio=warmup_ratio),
         evaluation=EvaluationConfig(prediction_bins=2),
     )
@@ -149,3 +150,21 @@ def test_rejects_noncanonical_model_output() -> None:
 
     with pytest.raises(ValueError, match="model output"):
         module(torch.randn(2, 3, 2))
+
+
+def test_optimizer_step_enforces_tabl_weight_constraint() -> None:
+    """优化器步之后施加 TABL 权重范数约束（约束不再走 forward 热路径）。"""
+    config = _config(model_name="binctabl")
+    model = build_model(
+        config,
+        feature_columns=["ASKp1", "ASKp2"],
+        history_snapshots=3,
+    )
+    module = LOBLightningModule(model, config)
+    optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+    with torch.no_grad():
+        model.BL.W1.mul_(20.0 / float(torch.linalg.matrix_norm(model.BL.W1.detach())))
+
+    module.optimizer_step(0, 0, optimizer)
+
+    assert float(torch.linalg.matrix_norm(model.BL.W1.detach())) == pytest.approx(10.0, rel=1e-6)
